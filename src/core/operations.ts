@@ -438,13 +438,28 @@ const sync_brain: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { performSync } = await import('../commands/sync.ts');
-    return performSync(ctx.engine, {
-      repoPath: p.repo as string | undefined,
-      dryRun: ctx.dryRun || (p.dry_run as boolean) || false,
-      noEmbed: (p.no_embed as boolean) || false,
-      noPull: (p.no_pull as boolean) || false,
-      full: (p.full as boolean) || false,
-    });
+
+    // MCP/operation handlers must keep stdout clean for JSON-RPC transport.
+    // `performSync()` can invoke `runImport()`, which prints human-readable
+    // progress to stdout during a first/full sync. That output corrupts the
+    // stdio MCP stream and breaks subsequent tool calls. Keep CLI output in
+    // the CLI path, but suppress stdout chatter for operation/MCP use.
+    const originalLog = console.log;
+    const originalInfo = console.info;
+    console.log = () => {};
+    console.info = () => {};
+    try {
+      return await performSync(ctx.engine, {
+        repoPath: p.repo as string | undefined,
+        dryRun: ctx.dryRun || (p.dry_run as boolean) || false,
+        noEmbed: (p.no_embed as boolean) || false,
+        noPull: (p.no_pull as boolean) || false,
+        full: (p.full as boolean) || false,
+      });
+    } finally {
+      console.log = originalLog;
+      console.info = originalInfo;
+    }
   },
   cliHints: { name: 'sync', hidden: true },
 };
