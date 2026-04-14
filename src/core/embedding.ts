@@ -1,15 +1,15 @@
 /**
- * Embedding Service
- * Ported from production Ruby implementation (embedding_service.rb, 190 LOC)
+ * Embedding Service — Gemini Edition
  *
- * OpenAI text-embedding-3-large at 1536 dimensions.
+ * Uses Google Gemini gemini-embedding-001 at 1536 dimensions.
+ * Drop-in replacement for the original OpenAI embedding service.
  * Retry with exponential backoff (4s base, 120s cap, 5 retries).
  * 8000 character input truncation.
+ *
+ * Requires GOOGLE_API_KEY environment variable.
  */
 
-import OpenAI from 'openai';
-
-const MODEL = 'text-embedding-3-large';
+const MODEL = 'gemini-embedding-001';
 const DIMENSIONS = 1536;
 const MAX_CHARS = 8000;
 const MAX_RETRIES = 5;
@@ -17,13 +17,17 @@ const BASE_DELAY_MS = 4000;
 const MAX_DELAY_MS = 120000;
 const BATCH_SIZE = 100;
 
-let client: OpenAI | null = null;
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI();
+function getApiKey(): string {
+  const key = process.env.GOOGLE_API_KEY;
+  if (!key) {
+    throw new Error(
+      'The GOOGLE_API_KEY environment variable is missing or empty. ' +
+      'Set it to use Gemini embeddings.'
+    );
   }
-  return client;
+  return key;
 }
 
 export async function embed(text: string): Promise<Float32Array> {
@@ -60,33 +64,60 @@ export async function embedBatch(
 }
 
 async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
+  const apiKey = getApiKey();
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await getClient().embeddings.create({
-        model: MODEL,
-        input: texts,
-        dimensions: DIMENSIONS,
+      // Use batchEmbedContents for multiple texts
+      const url = `${GEMINI_BASE}/models/${MODEL}:batchEmbedContents?key=${apiKey}`;
+
+      const requests = texts.map(text => ({
+        model: `models/${MODEL}`,
+        content: { parts: [{ text }] },
+        outputDimensionality: DIMENSIONS,
+      }));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests }),
       });
 
-      // Sort by index to maintain order
-      const sorted = response.data.sort((a, b) => a.index - b.index);
-      return sorted.map(d => new Float32Array(d.embedding));
+      if (!response.ok) {
+        const errorBody = await response.text();
+
+        // Rate limit — check Retry-After
+        if (response.status === 429) {
+          let delay = exponentialDelay(attempt);
+          const retryAfter = response.headers.get('retry-after');
+          if (retryAfter) {
+            const parsed = parseInt(retryAfter, 10);
+            if (!isNaN(parsed)) {
+              delay = parsed * 1000;
+            }
+          }
+          if (attempt < MAX_RETRIES - 1) {
+            await sleep(delay);
+            continue;
+          }
+        }
+
+        throw new Error(
+          `Gemini embedding API error (${response.status}): ${errorBody}`
+        );
+      }
+
+      const data = await response.json() as {
+        embeddings: Array<{ values: number[] }>;
+      };
+
+      // Return in order (Gemini batchEmbedContents preserves request order)
+      return data.embeddings.map(e => new Float32Array(e.values));
     } catch (e: unknown) {
       if (attempt === MAX_RETRIES - 1) throw e;
 
-      // Check for rate limit with Retry-After header
-      let delay = exponentialDelay(attempt);
-
-      if (e instanceof OpenAI.APIError && e.status === 429) {
-        const retryAfter = e.headers?.['retry-after'];
-        if (retryAfter) {
-          const parsed = parseInt(retryAfter, 10);
-          if (!isNaN(parsed)) {
-            delay = parsed * 1000;
-          }
-        }
-      }
-
+      // For non-429 errors, use exponential backoff
+      const delay = exponentialDelay(attempt);
       await sleep(delay);
     }
   }
