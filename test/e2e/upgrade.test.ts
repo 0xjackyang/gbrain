@@ -84,8 +84,10 @@ describeE2E('E2E: Check-Update', () => {
 
     expect(exitCode).toBe(0);
     const output = JSON.parse(stdout);
-    // With no releases, should return false and an error
+    // With no releases, should return a clean structured status, not a misleading error field.
     expect(output.update_available).toBe(false);
+    expect(output.check_status).toBe('no_releases');
+    expect(output).not.toHaveProperty('error');
   });
 
   test('version comparison wiring works end-to-end', () => {
