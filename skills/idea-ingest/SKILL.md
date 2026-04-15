@@ -25,6 +25,7 @@ mutating: true
 # Idea Ingest Skill
 
 > **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
+> **Quality convention:** Follow `skills/conventions/quality.md` for citation format, Iron Law back-linking, and the notability gate.
 
 ## Contract
 
