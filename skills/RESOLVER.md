@@ -82,8 +82,9 @@ When multiple skills could match:
 1. Prefer the most specific skill (meeting-ingestion over ingest)
 2. If the user mentions a URL, route by content type (link → idea-ingest, video → media-ingest)
 3. If the user mentions a person/company, check if enrich or query fits better
-4. Chaining is explicit in each skill's Phases section
-5. When in doubt, ask the user
+4. Route citation repair or citation-audit requests to `skills/citation-fixer/SKILL.md`; use `skills/maintain/SKILL.md` for broader health sweeps
+5. Chaining is explicit in each skill's Phases section
+6. When in doubt, ask the user
 
 ## Conventions (cross-cutting)
 

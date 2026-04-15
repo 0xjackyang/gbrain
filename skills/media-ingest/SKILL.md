@@ -29,6 +29,7 @@ mutating: true
 Ingest video, audio, PDF, book, screenshot, and GitHub repo content into the brain.
 
 > **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
+> **Quality convention:** Follow `skills/conventions/quality.md` for citation format, Iron Law back-linking, and the notability gate.
 
 ## Contract
 

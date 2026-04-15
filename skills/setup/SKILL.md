@@ -25,6 +25,8 @@ Set up GBrain from scratch. Target: working brain in under 5 minutes.
 - Schema state is tracked in `~/.gbrain/update-state.json` so future upgrades know what the user adopted or declined.
 - No Supabase anon key is requested; GBrain uses only the database connection string.
 
+> **Quality convention:** Follow `skills/conventions/quality.md` for citation format, Iron Law back-linking, and the notability gate.
+
 ## Install (if not already installed)
 
 ```bash
