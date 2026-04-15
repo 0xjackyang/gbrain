@@ -10,8 +10,14 @@ interface CheckUpdateResult {
   release_url: string;
   changelog_diff: string;
   published_at: string;
-  error?: string;
+  check_status: 'ok' | 'no_releases' | 'unavailable';
+  message?: string;
 }
+
+type ReleaseCheckResult =
+  | { status: 'ok'; release: { tag: string; published_at: string; url: string } }
+  | { status: 'no_releases' }
+  | { status: 'unavailable' };
 
 export function parseSemver(v: string): [number, number, number] | null {
   const clean = v.replace(/^v/, '');
@@ -40,21 +46,25 @@ function upgradeCommandForMethod(method: string): string {
   }
 }
 
-async function fetchLatestRelease(): Promise<{ tag: string; published_at: string; url: string } | null> {
+async function fetchLatestRelease(): Promise<ReleaseCheckResult> {
   try {
     const res = await fetch('https://api.github.com/repos/garrytan/gbrain/releases/latest', {
       headers: { 'User-Agent': `gbrain/${VERSION}` },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return { status: 'no_releases' };
+    if (!res.ok) return { status: 'unavailable' };
     const data = await res.json() as any;
     return {
-      tag: data.tag_name || '',
-      published_at: data.published_at || '',
-      url: data.html_url || '',
+      status: 'ok',
+      release: {
+        tag: data.tag_name || '',
+        published_at: data.published_at || '',
+        url: data.html_url || '',
+      },
     };
   } catch {
-    return null;
+    return { status: 'unavailable' };
   }
 }
 
@@ -127,9 +137,13 @@ export async function runCheckUpdate(args: string[]) {
   const method = detectInstallMethod();
   const upgradeCmd = upgradeCommandForMethod(method);
 
-  const release = await fetchLatestRelease();
+  const releaseResult = await fetchLatestRelease();
 
-  if (!release) {
+  if (releaseResult.status !== 'ok') {
+    const isNoReleases = releaseResult.status === 'no_releases';
+    const message = isNoReleases
+      ? 'No GitHub releases are published for garrytan/gbrain yet.'
+      : 'Could not reach GitHub Releases.';
     if (json) {
       console.log(JSON.stringify({
         current_version: VERSION,
@@ -137,17 +151,23 @@ export async function runCheckUpdate(args: string[]) {
         latest_version: '',
         update_available: false,
         upgrade_command: upgradeCmd,
-        release_url: '',
+        release_url: 'https://github.com/garrytan/gbrain/releases',
         changelog_diff: '',
         published_at: '',
-        error: 'no_releases',
+        check_status: releaseResult.status,
+        message,
       }, null, 2));
     } else {
-      console.log(`GBrain ${VERSION} — could not check for updates (no releases found or network unavailable).`);
+      if (isNoReleases) {
+        console.log(`GBrain ${VERSION} — no GitHub releases are published yet.`);
+      } else {
+        console.log(`GBrain ${VERSION} — could not check for updates (network unavailable).`);
+      }
     }
     return;
   }
 
+  const release = releaseResult.release;
   const latestVersion = release.tag.replace(/^v/, '');
   const updateAvailable = isMinorOrMajorBump(VERSION, latestVersion);
 
@@ -165,6 +185,7 @@ export async function runCheckUpdate(args: string[]) {
     release_url: release.url,
     changelog_diff: changelogDiff,
     published_at: release.published_at,
+    check_status: 'ok',
   };
 
   if (json) {
