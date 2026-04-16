@@ -192,6 +192,11 @@ This is YOUR job (the agent). Read the collected tweets:
    `- YYYY-MM-DD | Deleted tweet: "{content}" [Source: X deletion, detected {date}]`
 6. **Sync**: `gbrain sync --no-pull --no-embed`
 
+**Important architecture rule:** search governance and worldview promotion are different decisions.
+- If a query/theme is too broad or saturated for a standing search, that is **not** automatic rejection from the brain.
+- Maintain a separate worldview backlog / handoff artifact for broad-but-important themes, source URLs, and page-update candidates.
+- Otherwise the system will drift toward search-pack governance and away from broader worldview formation.
+
 ### Step 6: Set Up Cron
 
 The collector should run every 30 minutes:
