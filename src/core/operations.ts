@@ -440,14 +440,17 @@ const sync_brain: Operation = {
     const { performSync } = await import('../commands/sync.ts');
 
     // MCP/operation handlers must keep stdout clean for JSON-RPC transport.
-    // `performSync()` can invoke `runImport()`, which prints human-readable
-    // progress to stdout during a first/full sync. That output corrupts the
-    // stdio MCP stream and breaks subsequent tool calls. Keep CLI output in
-    // the CLI path, but suppress stdout chatter for operation/MCP use.
+    // `performSync()` can invoke both full-import logging and stale-embed
+    // progress writers. Some of that chatter goes through console.log/info,
+    // but embed --stale also uses process.stdout.write with carriage-return
+    // progress lines like `1/887 pages, 0 chunks embedded`. Any stdout write
+    // during stdio MCP handling corrupts the JSON-RPC stream.
     const originalLog = console.log;
     const originalInfo = console.info;
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
     console.log = () => {};
     console.info = () => {};
+    process.stdout.write = ((..._args: unknown[]) => true) as typeof process.stdout.write;
     try {
       return await performSync(ctx.engine, {
         repoPath: p.repo as string | undefined,
@@ -459,6 +462,7 @@ const sync_brain: Operation = {
     } finally {
       console.log = originalLog;
       console.info = originalInfo;
+      process.stdout.write = originalStdoutWrite;
     }
   },
   cliHints: { name: 'sync', hidden: true },
