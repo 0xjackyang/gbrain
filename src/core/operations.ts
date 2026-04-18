@@ -862,13 +862,32 @@ const sync_brain: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { performSync } = await import('../commands/sync.ts');
-    return performSync(ctx.engine, {
-      repoPath: p.repo as string | undefined,
-      dryRun: ctx.dryRun || (p.dry_run as boolean) || false,
-      noEmbed: (p.no_embed as boolean) || false,
-      noPull: (p.no_pull as boolean) || false,
-      full: (p.full as boolean) || false,
-    });
+
+    // MCP/operation handlers must keep stdout clean for JSON-RPC transport.
+    // `performSync()` can invoke both full-import logging and stale-embed
+    // progress writers. Some of that chatter goes through console.log/info,
+    // but embed --stale also uses process.stdout.write with carriage-return
+    // progress lines like `1/887 pages, 0 chunks embedded`. Any stdout write
+    // during stdio MCP handling corrupts the JSON-RPC stream.
+    const originalLog = console.log;
+    const originalInfo = console.info;
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    console.log = () => {};
+    console.info = () => {};
+    process.stdout.write = ((..._args: unknown[]) => true) as typeof process.stdout.write;
+    try {
+      return await performSync(ctx.engine, {
+        repoPath: p.repo as string | undefined,
+        dryRun: ctx.dryRun || (p.dry_run as boolean) || false,
+        noEmbed: (p.no_embed as boolean) || false,
+        noPull: (p.no_pull as boolean) || false,
+        full: (p.full as boolean) || false,
+      });
+    } finally {
+      console.log = originalLog;
+      console.info = originalInfo;
+      process.stdout.write = originalStdoutWrite;
+    }
   },
   cliHints: { name: 'sync', hidden: true },
 };
