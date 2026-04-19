@@ -9,7 +9,7 @@ cron scheduling, reports, identity, and access control.
 
 ## Architecture
 
-Contract-first: `src/core/operations.ts` defines ~30 shared operations. CLI and MCP
+Contract-first: `src/core/operations.ts` defines ~31 shared operations. CLI and MCP
 server are both generated from this single source. Engine factory (`src/core/engine-factory.ts`)
 dynamically imports the configured engine (`'pglite'` or `'postgres'`). Skills are fat
 markdown files (tool-agnostic, work with both CLI and plugin contexts).
@@ -21,8 +21,8 @@ markdown files (tool-agnostic, work with both CLI and plugin contexts).
 - `src/core/engine-factory.ts` — Engine factory with dynamic imports (`'pglite'` | `'postgres'`)
 - `src/core/pglite-engine.ts` — PGLite (embedded Postgres 17.5 via WASM) implementation, all 37 BrainEngine methods
 - `src/core/pglite-schema.ts` — PGLite-specific DDL (pgvector, pg_trgm, triggers)
-- `src/core/postgres-engine.ts` — Postgres + pgvector implementation (Supabase / self-hosted)
-- `src/core/utils.ts` — Shared SQL utilities extracted from postgres-engine.ts
+- `src/core/postgres-engine.ts` — Postgres + pgvector implementation (Supabase / self-hosted). This fork backport scopes `searchKeyword` / `searchVector` timeouts with `sql.begin` + `SET LOCAL`, uses `tryParseEmbedding()` in `getEmbeddingsByChunkIds()`, and writes JSONB via `sql.json(...)` on the known Postgres write sites.
+- `src/core/utils.ts` — Shared SQL utilities extracted from postgres-engine.ts. Exports `parseEmbedding(value)` for strict normalization and `tryParseEmbedding(value)` for availability-first read paths.
 - `src/core/db.ts` — Connection management, schema initialization
 - `src/commands/migrate-engine.ts` — Bidirectional engine migration (`gbrain migrate --to supabase/pglite`)
 - `src/core/import-file.ts` — importFromFile + importFromContent (chunk + embed + tags)
@@ -35,7 +35,7 @@ markdown files (tool-agnostic, work with both CLI and plugin contexts).
 - `src/core/search/intent.ts` — Query intent classifier (entity/temporal/event/general → auto-selects detail level)
 - `src/core/search/eval.ts` — Retrieval eval harness: P@k, R@k, MRR, nDCG@k metrics + runEval() orchestrator
 - `src/commands/eval.ts` — `gbrain eval` command: single-run table + A/B config comparison
-- `src/core/embedding.ts` — OpenAI text-embedding-3-large, batch, retry, backoff
+- `src/core/embedding.ts` — Gemini embeddings (`gemini-embedding-001`) with batching, retry, and backoff in this fork.
 - `src/core/check-resolvable.ts` — Resolver validation: reachability, MECE overlap, DRY checks, structured fix objects
 - `src/core/backoff.ts` — Adaptive load-aware throttling: CPU/memory checks, exponential backoff, active hours multiplier
 - `src/core/fail-improve.ts` — Deterministic-first, LLM-fallback loop with JSONL failure logging and auto-test generation
@@ -43,6 +43,8 @@ markdown files (tool-agnostic, work with both CLI and plugin contexts).
 - `src/core/enrichment-service.ts` — Global enrichment service: entity slug generation, tier auto-escalation, batch throttling
 - `src/core/data-research.ts` — Recipe validation, field extraction (MRR/ARR regex), dedup, tracker parsing, HTML stripping
 - `src/commands/extract.ts` — `gbrain extract links|timeline|all`: batch link/timeline extraction from markdown
+- `src/core/link-extraction.ts` — upstream graph extraction helper restored in this backport for wikilink/domain-pattern parity work; active local extractors still live in `src/commands/extract.ts` and `src/commands/backlinks.ts`
+- `src/commands/orphans.ts` — `gbrain orphans [--json] [--count] [--include-pseudo]`: find pages with zero inbound wikilinks
 - `src/commands/features.ts` — `gbrain features --json --auto-fix`: usage scan + feature adoption salesman
 - `src/commands/autopilot.ts` — `gbrain autopilot --install`: self-maintaining brain daemon (sync+extract+embed)
 - `src/mcp/server.ts` — MCP stdio server (generated from operations)
@@ -103,6 +105,10 @@ Key commands added in v0.7:
 - `gbrain init` — defaults to PGLite (no Supabase needed), scans repo size, suggests Supabase for 1000+ files
 - `gbrain migrate --to supabase` / `gbrain migrate --to pglite` — bidirectional engine migration
 
+Backported reliability commands/checks on this fork:
+- `gbrain orphans [--json] [--count] [--include-pseudo]` — find pages with zero inbound wikilinks
+- `gbrain doctor` adds `jsonb_integrity` and `markdown_body_completeness` detection checks
+
 ## Testing
 
 `bun test` runs all tests (34 unit test files + 5 E2E test files). Unit tests run
@@ -120,7 +126,7 @@ parity), `test/cli.test.ts` (CLI structure), `test/config.test.ts` (config redac
 `test/storage.test.ts` (storage backends), `test/supabase-admin.test.ts` (Supabase admin),
 `test/yaml-lite.test.ts` (YAML parsing), `test/check-update.test.ts` (version check + update CLI),
 `test/pglite-engine.test.ts` (PGLite engine, all 37 BrainEngine methods),
-`test/utils.test.ts` (shared SQL utilities), `test/engine-factory.test.ts` (engine factory + dynamic imports),
+`test/utils.test.ts` (shared SQL utilities, including `parseEmbedding` / `tryParseEmbedding`), `test/engine-factory.test.ts` (engine factory + dynamic imports),
 `test/integrations.test.ts` (recipe parsing, CLI routing, recipe validation),
 `test/publish.test.ts` (content stripping, encryption, password generation, HTML output),
 `test/backlinks.test.ts` (entity extraction, back-link detection, timeline entry generation),
@@ -139,7 +145,8 @@ parity), `test/cli.test.ts` (CLI structure), `test/config.test.ts` (config redac
 `test/enrichment-service.test.ts` (entity slugification, extraction, tier escalation),
 `test/data-research.test.ts` (recipe validation, MRR/ARR extraction, dedup, tracker parsing, HTML stripping),
 `test/extract.test.ts` (link extraction, timeline extraction, frontmatter parsing, directory type inference),
-`test/features.test.ts` (feature scanning, brain_score calculation, CLI routing, persistence).
+`test/features.test.ts` (feature scanning, brain_score calculation, CLI routing, persistence),
+`test/orphans.test.ts` (orphan detection/filtering/output modes), `test/postgres-engine.test.ts` (search timeout scoping), `test/e2e/jsonb-roundtrip.test.ts` (doctor-scanned JSONB write-site regression coverage).
 
 E2E tests (`test/e2e/`): Run against real Postgres+pgvector. Require `GBRAIN_E2E_DATABASE_URL`.
 - `bun run test:e2e` runs Tier 1 (mechanical, all operations, no API keys)

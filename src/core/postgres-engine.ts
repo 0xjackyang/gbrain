@@ -17,7 +17,7 @@ import type {
 } from './types.ts';
 import { GBrainError } from './types.ts';
 import * as db from './db.ts';
-import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult } from './utils.ts';
+import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult, tryParseEmbedding } from './utils.ts';
 
 export class PostgresEngine implements BrainEngine {
   private _sql: ReturnType<typeof postgres> | null = null;
@@ -104,7 +104,7 @@ export class PostgresEngine implements BrainEngine {
 
     const rows = await sql`
       INSERT INTO pages (slug, type, title, compiled_truth, timeline, frontmatter, content_hash, updated_at)
-      VALUES (${slug}, ${page.type}, ${page.title}, ${page.compiled_truth}, ${page.timeline || ''}, ${JSON.stringify(frontmatter)}::jsonb, ${hash}, now())
+      VALUES (${slug}, ${page.type}, ${page.title}, ${page.compiled_truth}, ${page.timeline || ''}, ${sql.json(frontmatter)}, ${hash}, now())
       ON CONFLICT (slug) DO UPDATE SET
         type = EXCLUDED.type,
         title = EXCLUDED.title,
@@ -191,11 +191,13 @@ export class PostgresEngine implements BrainEngine {
     const detailLow = opts?.detail === 'low';
 
     // Search-only timeout: prevents DoS via expensive queries without
-    // affecting long-running operations like embed --all or bulk import
-    await sql`SET statement_timeout = '8s'`;
-    try {
+    // affecting long-running operations like embed --all or bulk import.
+    // SET LOCAL inside sql.begin() scopes the GUC to the transaction so
+    // it can never leak onto a pooled connection returned to other callers.
+    const rows = await sql.begin(async sql => {
+      await sql`SET LOCAL statement_timeout = '8s'`;
       // CTE: rank pages by FTS score, then pick the best chunk per page in SQL
-      const rows = await sql`
+      return await sql`
         WITH ranked_pages AS (
           SELECT p.id, p.slug, p.title, p.type,
             ts_rank(p.search_vector, websearch_to_tsquery('english', ${query})) AS score
@@ -221,10 +223,8 @@ export class PostgresEngine implements BrainEngine {
         FROM best_chunks
         ORDER BY score DESC
       `;
-      return rows.map(rowToSearchResult);
-    } finally {
-      await sql`SET statement_timeout = '0'`;
-    }
+    });
+    return rows.map(rowToSearchResult);
   }
 
   async searchVector(embedding: Float32Array, opts?: SearchOpts): Promise<SearchResult[]> {
@@ -241,10 +241,11 @@ export class PostgresEngine implements BrainEngine {
 
     const vecStr = '[' + Array.from(embedding).join(',') + ']';
 
-    // Search-only timeout (see searchKeyword for rationale)
-    await sql`SET statement_timeout = '8s'`;
-    try {
-      const rows = await sql`
+    // Search-only timeout (see searchKeyword for rationale). SET LOCAL +
+    // sql.begin ensures the GUC stays transaction-scoped on the pooled connection.
+    const rows = await sql.begin(async sql => {
+      await sql`SET LOCAL statement_timeout = '8s'`;
+      return await sql`
         SELECT
           p.slug, p.id as page_id, p.title, p.type,
           cc.id as chunk_id, cc.chunk_index, cc.chunk_text, cc.chunk_source,
@@ -260,10 +261,8 @@ export class PostgresEngine implements BrainEngine {
         LIMIT ${limit}
         OFFSET ${offset}
       `;
-      return rows.map(rowToSearchResult);
-    } finally {
-      await sql`SET statement_timeout = '0'`;
-    }
+    });
+    return rows.map(rowToSearchResult);
   }
 
   async getEmbeddingsByChunkIds(ids: number[]): Promise<Map<number, Float32Array>> {
@@ -275,7 +274,8 @@ export class PostgresEngine implements BrainEngine {
     `;
     const result = new Map<number, Float32Array>();
     for (const row of rows) {
-      if (row.embedding) result.set(row.id as number, row.embedding as Float32Array);
+      const embedding = tryParseEmbedding(row.embedding);
+      if (embedding) result.set(row.id as number, embedding);
     }
     return result;
   }
@@ -518,7 +518,7 @@ export class PostgresEngine implements BrainEngine {
     const sql = this.sql;
     const result = await sql`
       INSERT INTO raw_data (page_id, source, data)
-      SELECT id, ${source}, ${JSON.stringify(data)}::jsonb
+      SELECT id, ${source}, ${sql.json(data)}
       FROM pages WHERE slug = ${slug}
       ON CONFLICT (page_id, source) DO UPDATE SET
         data = EXCLUDED.data,
@@ -671,7 +671,7 @@ export class PostgresEngine implements BrainEngine {
     const sql = this.sql;
     await sql`
       INSERT INTO ingest_log (source_type, source_ref, pages_updated, summary)
-      VALUES (${entry.source_type}, ${entry.source_ref}, ${JSON.stringify(entry.pages_updated)}::jsonb, ${entry.summary})
+      VALUES (${entry.source_type}, ${entry.source_ref}, ${sql.json(entry.pages_updated)}, ${entry.summary})
     `;
   }
 

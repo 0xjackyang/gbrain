@@ -2,6 +2,16 @@
 
 All notable changes to GBrain will be documented in this file.
 
+## [Unreleased]
+
+### Backported
+
+- **`gbrain sync` no longer deadlocks on larger change sets.** Backports the upstream fix that removes the outer non-reentrant transaction wrap while preserving per-file atomicity.
+- **Search timeout scoping is now connection-safe.** Postgres search paths use `sql.begin()` + `SET LOCAL statement_timeout` so the timeout cannot leak across pooled connections.
+- **`tryParseEmbedding()` keeps one bad row from killing search rescoring.** Read paths now skip corrupt embeddings with a one-time warning while strict ingest/migration paths still fail loudly.
+- **`gbrain orphans` surfaces pages with zero inbound wikilinks.** Includes CLI wiring, MCP/tool operation exposure, and tests.
+- **`gbrain doctor` now detects JSONB double-encode damage and suspiciously truncated markdown bodies.** This fork backport includes detection and future-write hardening; the standalone `gbrain repair-jsonb` command is still a separate lane.
+
 ## [0.10.1] - 2026-04-15
 
 ### Fixed

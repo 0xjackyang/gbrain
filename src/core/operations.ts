@@ -630,7 +630,7 @@ const file_upload: Operation = {
     try {
       await sql`
         INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-        VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
+        VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${sql.json({})})
         ON CONFLICT (storage_path) DO UPDATE SET
           content_hash = EXCLUDED.content_hash,
           size_bytes = EXCLUDED.size_bytes,
@@ -669,6 +669,24 @@ const file_url: Operation = {
   },
 };
 
+// --- Orphans ---
+
+const find_orphans: Operation = {
+  name: 'find_orphans',
+  description: 'Find pages with no inbound wikilinks. Essential for content enrichment cycles.',
+  params: {
+    include_pseudo: {
+      type: 'boolean',
+      description: 'Include auto-generated and pseudo pages that are filtered by default',
+    },
+  },
+  handler: async (_ctx, p) => {
+    const { findOrphans } = await import('../commands/orphans.ts');
+    return findOrphans((p.include_pseudo as boolean) || false);
+  },
+  cliHints: { name: 'orphans', hidden: true },
+};
+
 // --- Exports ---
 
 export const operations: Operation[] = [
@@ -694,6 +712,8 @@ export const operations: Operation[] = [
   log_ingest, get_ingest_log,
   // Files
   file_list, file_upload, file_url,
+  // Orphans
+  find_orphans,
 ];
 
 export const operationsByName = Object.fromEntries(
