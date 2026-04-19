@@ -1,6 +1,6 @@
 import type { BrainEngine } from '../core/engine.ts';
 import * as db from '../core/db.ts';
-import { LATEST_VERSION } from '../core/migrate.ts';
+import { LATEST_VERSION, getSchemaVersionState } from '../core/migrate.ts';
 import { checkResolvable } from '../core/check-resolvable.ts';
 import { join } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -121,12 +121,30 @@ export async function runDoctor(engine: BrainEngine | null, args: string[]) {
 
   // 6. Schema version
   try {
-    const version = await engine.getConfig('version');
-    const v = parseInt(version || '0', 10);
-    if (v >= LATEST_VERSION) {
-      checks.push({ name: 'schema_version', status: 'ok', message: `Version ${v} (latest: ${LATEST_VERSION})` });
+    const schemaState = await getSchemaVersionState(engine, { fallbackVersion: 0 });
+    const v = schemaState.version;
+    const sourceNote = schemaState.source === 'schema_version'
+      ? ' via legacy schema_version key'
+      : schemaState.source === 'default'
+        ? ' (no version key found)'
+        : '';
+    if (schemaState.source === 'schema_version') {
+      const message = v >= LATEST_VERSION
+        ? `Version ${v} via legacy schema_version key. Latest schema is present, but only under the legacy key. Run gbrain migrate-schema-version to adopt the canonical version key.`
+        : `Version ${v} via legacy schema_version key, latest is ${LATEST_VERSION}. Run gbrain migrate-schema-version.`;
+      checks.push({
+        name: 'schema_version',
+        status: 'warn',
+        message,
+      });
+    } else if (v >= LATEST_VERSION) {
+      checks.push({ name: 'schema_version', status: 'ok', message: `Version ${v} (latest: ${LATEST_VERSION})${sourceNote}` });
     } else {
-      checks.push({ name: 'schema_version', status: 'warn', message: `Version ${v}, latest is ${LATEST_VERSION}. Run gbrain init to migrate.` });
+      checks.push({
+        name: 'schema_version',
+        status: 'warn',
+        message: `Version ${v}${sourceNote}, latest is ${LATEST_VERSION}. Run gbrain migrate-schema-version.`,
+      });
     }
   } catch {
     checks.push({ name: 'schema_version', status: 'warn', message: 'Could not check schema version' });

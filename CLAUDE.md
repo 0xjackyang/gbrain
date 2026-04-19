@@ -109,6 +109,7 @@ Backported reliability commands/checks on this fork:
 - `gbrain orphans [--json] [--count] [--include-pseudo]` — find pages with zero inbound wikilinks
 - `gbrain doctor` adds `jsonb_integrity` and `markdown_body_completeness` detection checks
 - `gbrain repair-jsonb [--dry-run] [--json]` — repair double-encoded Postgres JSONB, including mirrored `page_versions.frontmatter`
+- `gbrain migrate-schema-version [--dry-run] [--json]` — adopt legacy `schema_version`, run pending migrations, and sync the compatibility key
 
 ## Testing
 

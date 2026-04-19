@@ -25,7 +25,16 @@ gbrain doctor --json
 - `embeddings`: coverage percentage
 
 **If it fails:** The doctor output includes specific fix instructions for each
-check. See `skills/setup/SKILL.md` Error Recovery table.
+check. If `schema_version` warns because only the legacy `schema_version` key is
+present, run:
+
+```bash
+gbrain migrate-schema-version --dry-run --json
+# then, when authorized:
+gbrain migrate-schema-version --json
+```
+
+See `skills/setup/SKILL.md` Error Recovery table.
 
 ---
 

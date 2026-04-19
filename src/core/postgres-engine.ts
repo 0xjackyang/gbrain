@@ -57,25 +57,38 @@ export class PostgresEngine implements BrainEngine {
   }
 
   async initSchema(): Promise<void> {
-    const conn = this.sql;
-    // Advisory lock prevents concurrent initSchema() calls from deadlocking
-    // on DDL statements (DROP TRIGGER + CREATE TRIGGER acquire AccessExclusiveLock)
-    await conn`SELECT pg_advisory_lock(42)`;
-    try {
-      await conn.unsafe(SCHEMA_SQL);
+    const conn = this._sql || db.getConnection();
+    await conn.begin(async (session) => {
+      const lockedEngine = Object.create(this) as PostgresEngine;
+      Object.defineProperty(lockedEngine, 'sql', { get: () => session });
+      Object.defineProperty(lockedEngine, '_sql', {
+        value: session as unknown as ReturnType<typeof postgres>,
+        writable: false,
+      });
 
-      // Run any pending migrations automatically
-      const { applied } = await runMigrations(this);
-      if (applied > 0) {
-        console.log(`  ${applied} migration(s) applied`);
+      // Advisory lock prevents concurrent initSchema() calls from deadlocking
+      // on DDL statements (DROP TRIGGER + CREATE TRIGGER acquire AccessExclusiveLock)
+      await session`SELECT pg_advisory_lock(42)`;
+      try {
+        await session.unsafe(SCHEMA_SQL);
+
+        // Run any pending migrations automatically on the transaction-pinned
+        // session so version reads/writes and migration SQL share the same backend.
+        const { applied } = await runMigrations(lockedEngine);
+        if (applied > 0) {
+          console.log(`  ${applied} migration(s) applied`);
+        }
+      } finally {
+        await session`SELECT pg_advisory_unlock(42)`;
       }
-    } finally {
-      await conn`SELECT pg_advisory_unlock(42)`;
-    }
+    });
   }
 
   async transaction<T>(fn: (engine: BrainEngine) => Promise<T>): Promise<T> {
     const conn = this._sql || db.getConnection();
+    if (typeof (conn as { begin?: unknown }).begin !== 'function') {
+      return fn(this);
+    }
     return conn.begin(async (tx) => {
       // Create a scoped engine with tx as its connection, no shared state mutation
       const txEngine = Object.create(this) as PostgresEngine;

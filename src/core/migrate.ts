@@ -21,6 +21,15 @@ interface Migration {
   handler?: (engine: BrainEngine) => Promise<void>;
 }
 
+export type SchemaVersionSource = 'version' | 'schema_version' | 'default';
+
+export interface SchemaVersionState {
+  version: number;
+  source: SchemaVersionSource;
+  canonical_present: boolean;
+  legacy_present: boolean;
+}
+
 // Migrations are embedded here, not loaded from files.
 // Add new migrations at the end. Never modify existing ones.
 const MIGRATIONS: Migration[] = [
@@ -32,6 +41,7 @@ const MIGRATIONS: Migration[] = [
     handler: async (engine) => {
       const pages = await engine.listPages();
       let renamed = 0;
+      const failures: string[] = [];
       for (const page of pages) {
         const newSlug = slugifyPath(page.slug);
         if (newSlug !== page.slug) {
@@ -41,9 +51,12 @@ const MIGRATIONS: Migration[] = [
             renamed++;
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            console.error(`  Warning: could not rename "${page.slug}" → "${newSlug}": ${msg}`);
+            failures.push(`"${page.slug}" → "${newSlug}": ${msg}`);
           }
         }
+      }
+      if (failures.length > 0) {
+        throw new Error(`slugify_existing_pages failed for ${failures.length} slug(s): ${failures.slice(0, 5).join('; ')}`);
       }
       if (renamed > 0) console.log(`  Renamed ${renamed} slugs`);
     },
@@ -88,9 +101,61 @@ export const LATEST_VERSION = MIGRATIONS.length > 0
   ? MIGRATIONS[MIGRATIONS.length - 1].version
   : 1;
 
+export async function getSchemaVersionState(
+  engine: BrainEngine,
+  opts: { fallbackVersion?: number } = {},
+): Promise<SchemaVersionState> {
+  const fallbackVersion = opts.fallbackVersion ?? 0;
+  const canonical = await engine.getConfig('version');
+  const legacy = await engine.getConfig('schema_version');
+
+  const parsedCanonical = canonical == null ? Number.NaN : parseInt(canonical, 10);
+  if (Number.isFinite(parsedCanonical)) {
+    return {
+      version: parsedCanonical,
+      source: 'version',
+      canonical_present: true,
+      legacy_present: legacy !== null,
+    };
+  }
+
+  const parsedLegacy = legacy == null ? Number.NaN : parseInt(legacy, 10);
+  if (Number.isFinite(parsedLegacy)) {
+    return {
+      version: parsedLegacy,
+      source: 'schema_version',
+      canonical_present: false,
+      legacy_present: true,
+    };
+  }
+
+  return {
+    version: fallbackVersion,
+    source: 'default',
+    canonical_present: false,
+    legacy_present: false,
+  };
+}
+
+export async function canonicalizeLegacySchemaVersion(engine: BrainEngine): Promise<boolean> {
+  const state = await getSchemaVersionState(engine, { fallbackVersion: 1 });
+  if (state.source !== 'schema_version' || state.canonical_present) {
+    return false;
+  }
+
+  await engine.setConfig('version', String(state.version));
+  return true;
+}
+
+export function getPendingMigrations(currentVersion: number): Array<{ version: number; name: string }> {
+  return MIGRATIONS
+    .filter((m) => m.version > currentVersion)
+    .map((m) => ({ version: m.version, name: m.name }));
+}
+
 export async function runMigrations(engine: BrainEngine): Promise<{ applied: number; current: number }> {
-  const currentStr = await engine.getConfig('version');
-  const current = parseInt(currentStr || '1', 10);
+  await canonicalizeLegacySchemaVersion(engine);
+  const { version: current } = await getSchemaVersionState(engine, { fallbackVersion: 1 });
 
   let applied = 0;
   for (const m of MIGRATIONS) {

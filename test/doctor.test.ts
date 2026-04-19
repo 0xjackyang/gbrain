@@ -11,7 +11,7 @@ describe('doctor command', () => {
     expect(typeof LATEST_VERSION).toBe('number');
   });
 
-  test('CLI registers doctor command', async () => {
+  test('CLI registers doctor and migrate-schema-version commands', async () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', '--help'],
       cwd: import.meta.dir + '/..',
@@ -19,6 +19,7 @@ describe('doctor command', () => {
     const stdout = new TextDecoder().decode(result.stdout);
     expect(stdout).toContain('doctor');
     expect(stdout).toContain('--fast');
+    expect(stdout).toContain('migrate-schema-version');
   });
 
   test('Check interface supports issues array', async () => {
@@ -44,11 +45,12 @@ describe('doctor command', () => {
   // v0.12.2 reliability wave — doctor detects JSONB double-encode + truncated
   // bodies and points users at the standalone `gbrain repair-jsonb` command.
   // Detection only; repair lives in src/commands/repair-jsonb.ts.
-  test('doctor source contains jsonb_integrity and markdown_body_completeness checks', async () => {
+  test('doctor source contains jsonb_integrity, markdown_body_completeness, and schema migration guidance', async () => {
     const source = await Bun.file(new URL('../src/commands/doctor.ts', import.meta.url)).text();
     expect(source).toContain('jsonb_integrity');
     expect(source).toContain('markdown_body_completeness');
     expect(source).toContain('gbrain repair-jsonb');
+    expect(source).toContain('gbrain migrate-schema-version');
   });
 
   test('jsonb_integrity check covers the four JSONB sites fixed in v0.12.1', async () => {

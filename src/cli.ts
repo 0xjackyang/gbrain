@@ -18,7 +18,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot', 'repair-jsonb', 'orphans']);
+const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot', 'repair-jsonb', 'migrate-schema-version', 'orphans']);
 
 async function main() {
   const args = process.argv.slice(2);
@@ -341,6 +341,11 @@ async function handleCliOnly(command: string, args: string[]) {
         await runConfig(engine, args);
         break;
       }
+      case 'migrate-schema-version': {
+        const { runMigrateSchemaVersion } = await import('./commands/migrate-schema-version.ts');
+        await runMigrateSchemaVersion(engine, args);
+        break;
+      }
       // doctor is handled before connectEngine() above
       case 'migrate': {
         const { runMigrateEngine } = await import('./commands/migrate-engine.ts');
@@ -481,6 +486,7 @@ TOOLS
   lint <dir|file> [--fix]            Catch LLM artifacts, placeholder dates, bad frontmatter
   orphans [--json] [--count]         Find pages with no inbound wikilinks
   repair-jsonb [--dry-run] [--json]  Repair v0.12.0 double-encoded JSONB (Postgres)
+  migrate-schema-version [--dry-run] [--json]  Canonicalize legacy schema_version key and run pending migrations
   report --type <name> --content ... Save timestamped report to brain/reports/
 
 ADMIN

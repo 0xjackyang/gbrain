@@ -13,6 +13,7 @@ import { PostgresEngine } from '../../src/core/postgres-engine.ts';
 import * as db from '../../src/core/db.ts';
 import { importFromContent } from '../../src/core/import-file.ts';
 import { parseMarkdown } from '../../src/core/markdown.ts';
+import { LATEST_VERSION } from '../../src/core/migrate.ts';
 
 // Load .env.testing if present
 const envPath = resolve(import.meta.dir, '../../.env.testing');
@@ -133,9 +134,10 @@ export async function setupDB(): Promise<PostgresEngine> {
     await conn.unsafe(`TRUNCATE ${table} CASCADE`);
   }
 
-  // Re-seed config (initSchema inserts default config rows)
+  // Re-seed config (initSchema inserts default config rows; after truncate, keep
+  // the test DB aligned with the latest already-applied schema state).
   await conn.unsafe(`
-    INSERT INTO config (key, value) VALUES ('schema_version', '1')
+    INSERT INTO config (key, value) VALUES ('version', '${LATEST_VERSION}')
     ON CONFLICT (key) DO NOTHING
   `);
 

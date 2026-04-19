@@ -12,6 +12,7 @@ All notable changes to GBrain will be documented in this file.
 - **`gbrain orphans` surfaces pages with zero inbound wikilinks.** Includes CLI wiring, MCP/tool operation exposure, and tests.
 - **`gbrain doctor` now detects JSONB double-encode damage and suspiciously truncated markdown bodies.** This fork backport includes detection and future-write hardening so existing damage is visible before repair.
 - **`gbrain repair-jsonb [--dry-run] [--json]` is now available as an operator-run cleanup command.** Repairs the four primary Postgres JSONB write targets plus mirrored `page_versions.frontmatter`; kept command-only on this fork rather than auto-running via post-upgrade migration.
+- **`gbrain migrate-schema-version [--dry-run] [--json]` canonicalizes legacy `schema_version` config and runs pending migrations.** `gbrain doctor` now falls back to the legacy key for diagnosis and points operators at the dedicated migration command instead of `gbrain init`.
 
 ## [0.10.1] - 2026-04-15
 
