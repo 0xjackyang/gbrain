@@ -44,6 +44,9 @@ gbrain sync --repo /path/to/brain && gbrain embed --stale
   (configurable with `--interval N`). Embeds inline for small changesets. Exits
   after 5 consecutive failures, so run under a process manager or pair with a
   cron fallback.
+- `gbrain sync --status --repo <path> [--json]` -- inspect the repo-scoped sync
+  anchor, last successful sync time, and whether the repo is the current default
+  sync target. Use this instead of reading raw `sync.*` config keys directly.
 
 ### Approach 1: Cron Job (recommended)
 
@@ -123,12 +126,17 @@ hashes match. If both a cron and `--watch` fire simultaneously, no conflict.
    poll). Run `gbrain search "<text from the edit>"`. The updated content
    should appear in results. If it returns old content, sync failed.
 
-2. **Compare page count to file count.** Run `gbrain stats` and count the
+2. **Check repo-scoped sync status.** Run `gbrain sync --status --repo /path/to/brain`.
+   The reported `Last sync` should advance after each successful sync, and the
+   reported `Last commit` should match the repo's current sync anchor for that
+   worktree.
+
+3. **Compare page count to file count.** Run `gbrain stats` and count the
    syncable markdown files in the brain repo. The page count in the database
    should match. If they diverge, files are being silently skipped (likely
    a Transaction mode pooler issue).
 
-3. **Check embedded chunk count.** In `gbrain stats`, the embedded chunk
+4. **Check embedded chunk count.** In `gbrain stats`, the embedded chunk
    count should be close to the total chunk count. A large gap means
    `gbrain embed --stale` isn't running after sync, leaving chunks invisible
    to vector search.
