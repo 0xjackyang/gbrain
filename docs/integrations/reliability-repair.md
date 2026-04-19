@@ -2,17 +2,19 @@
 
 If you ran v0.12.0 on real Postgres or Supabase, two bugs may have corrupted
 data already in your brain. v0.12.1 fixed the code going forward.
-This fork backport adds `gbrain doctor` detection and future-write hardening,
-but the standalone `gbrain repair-jsonb` command remains a separate lane.
+This fork backport adds `gbrain doctor` detection, future-write hardening,
+and the operator-run `gbrain repair-jsonb [--dry-run] [--json]` command.
 PGLite users are not affected.
 
 ## What got corrupted
 
-**JSONB double-encode.** Four write sites used
+**JSONB double-encode.** Four primary write sites used
 `${JSON.stringify(x)}::jsonb` with postgres.js, which stored a JSONB
 *string literal* instead of an object. `frontmatter ->> 'key'` returns NULL;
-GIN indexes are ineffective. Affected: `pages.frontmatter`,
-`raw_data.data`, `ingest_log.pages_updated`, `files.metadata`.
+GIN indexes are ineffective. Primary affected columns: `pages.frontmatter`,
+`raw_data.data`, `ingest_log.pages_updated`, `files.metadata`. On this fork,
+the operator repair also rewrites mirrored `page_versions.frontmatter`, so the
+repair target set is five columns total.
 
 **Markdown body truncation.** `splitBody()` treated `---` horizontal rules
 as a body/timeline delimiter, dropping everything after the first rule.
@@ -37,14 +39,15 @@ Reports two new checks:
 For JSONB (mechanically fixable):
 
 ```bash
-# upstream command / desired separate lane
-gbrain repair-jsonb
+gbrain repair-jsonb --dry-run --json
+# inspect counts, then run without --dry-run when authorized
+gbrain repair-jsonb --json
 ```
 
 Upstream runs `UPDATE <table> SET <col> = (<col>#>>'{}')::jsonb WHERE jsonb_typeof(<col>) = 'string'`
-across every affected column. Idempotent. This fork backport does **not** ship
-that command yet; treat it as the follow-on migration/operator action if doctor
-finds existing double-encoded rows.
+across every affected column. Idempotent. This fork now ships the command as an
+explicit operator action; it is intentionally command-only here rather than an
+auto-run post-upgrade migration.
 
 For truncated markdown bodies (source-dependent):
 
@@ -62,7 +65,10 @@ you decide whether to re-import from source or accept the truncation.
 
 ```
 gbrain doctor
+gbrain repair-jsonb --dry-run --json
 ```
 
-All four `jsonb_integrity` rows should read zero. `markdown_body_completeness`
-should match your expectations for the corpus.
+`gbrain doctor` should report `jsonb_integrity` as OK, and
+`gbrain repair-jsonb --dry-run --json` should show zero rows across all five
+repair targets. `markdown_body_completeness` should match your expectations for
+the corpus.

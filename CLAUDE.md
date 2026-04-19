@@ -108,6 +108,7 @@ Key commands added in v0.7:
 Backported reliability commands/checks on this fork:
 - `gbrain orphans [--json] [--count] [--include-pseudo]` — find pages with zero inbound wikilinks
 - `gbrain doctor` adds `jsonb_integrity` and `markdown_body_completeness` detection checks
+- `gbrain repair-jsonb [--dry-run] [--json]` — repair double-encoded Postgres JSONB, including mirrored `page_versions.frontmatter`
 
 ## Testing
 
