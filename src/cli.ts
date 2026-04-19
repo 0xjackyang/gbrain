@@ -18,7 +18,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot', 'orphans']);
+const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot', 'repair-jsonb', 'orphans']);
 
 async function main() {
   const args = process.argv.slice(2);
@@ -278,6 +278,11 @@ async function handleCliOnly(command: string, args: string[]) {
     await runReport(args);
     return;
   }
+  if (command === 'repair-jsonb') {
+    const { runRepairJsonbCli } = await import('./commands/repair-jsonb.ts');
+    await runRepairJsonbCli(args);
+    return;
+  }
   if (command === 'doctor') {
     // Doctor runs filesystem checks first (no DB needed), then DB checks.
     // --fast skips DB checks entirely.
@@ -475,6 +480,7 @@ TOOLS
   check-backlinks <check|fix> [dir]  Find/fix missing back-links across brain
   lint <dir|file> [--fix]            Catch LLM artifacts, placeholder dates, bad frontmatter
   orphans [--json] [--count]         Find pages with no inbound wikilinks
+  repair-jsonb [--dry-run] [--json]  Repair v0.12.0 double-encoded JSONB (Postgres)
   report --type <name> --content ... Save timestamped report to brain/reports/
 
 ADMIN
