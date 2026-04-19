@@ -106,7 +106,8 @@ Key commands added in v0.7:
 ## Testing
 
 `bun test` runs all tests (34 unit test files + 5 E2E test files). Unit tests run
-without a database. E2E tests skip gracefully when `DATABASE_URL` is not set.
+without a database. Destructive E2E tests skip gracefully when `GBRAIN_E2E_DATABASE_URL`
+is not set.
 
 Unit tests: `test/markdown.test.ts` (frontmatter parsing), `test/chunkers/recursive.test.ts`
 (chunking), `test/sync.test.ts` (sync logic), `test/parity.test.ts` (operations contract
@@ -140,15 +141,17 @@ parity), `test/cli.test.ts` (CLI structure), `test/config.test.ts` (config redac
 `test/extract.test.ts` (link extraction, timeline extraction, frontmatter parsing, directory type inference),
 `test/features.test.ts` (feature scanning, brain_score calculation, CLI routing, persistence).
 
-E2E tests (`test/e2e/`): Run against real Postgres+pgvector. Require `DATABASE_URL`.
+E2E tests (`test/e2e/`): Run against real Postgres+pgvector. Require `GBRAIN_E2E_DATABASE_URL`.
 - `bun run test:e2e` runs Tier 1 (mechanical, all operations, no API keys)
 - `test/e2e/search-quality.test.ts` runs search quality E2E against PGLite (no API keys, in-memory)
 - `test/e2e/upgrade.test.ts` runs check-update E2E against real GitHub API (network required)
 - Tier 2 (`skills.test.ts`) requires OpenClaw + API keys, runs nightly in CI
 - If `.env.testing` doesn't exist in this directory, check sibling worktrees for one:
   `find ../  -maxdepth 2 -name .env.testing -print -quit` and copy it here if found.
-- Always run E2E tests when they exist. Do not skip them just because DATABASE_URL
-  is not set. Start the test DB, run the tests, then tear it down.
+- Always run E2E tests when they exist. Do not skip them just because `GBRAIN_E2E_DATABASE_URL`
+  is not set. Start the test DB, point that variable at it, run the tests, then tear it down.
+- Ambient `DATABASE_URL` is ignored on purpose for destructive E2E tests so shell state cannot
+  silently redirect them into a live brain.
 
 ### API keys and running ALL tests
 
@@ -173,20 +176,20 @@ You are responsible for spinning up and tearing down the test Postgres container
 Do not leave containers running after tests. Do not skip E2E tests.
 
 1. **Check for `.env.testing`** — if missing, copy from sibling worktree.
-   Read it to get the DATABASE_URL (it has the port number).
+   Read it to get `GBRAIN_E2E_DATABASE_URL` (it has the port number).
 2. **Check if the port is free:**
    `docker ps --filter "publish=PORT"` — if another container is on that port,
    pick a different port (try 5435, 5436, 5437) and start on that one instead.
 3. **Start the test DB:**
    ```bash
    docker run -d --name gbrain-test-pg \
-     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=*** \
      -e POSTGRES_DB=gbrain_test \
      -p PORT:5432 pgvector/pgvector:pg16
    ```
    Wait for ready: `docker exec gbrain-test-pg pg_isready -U postgres`
 4. **Run E2E tests:**
-   `DATABASE_URL=postgresql://postgres:postgres@localhost:PORT/gbrain_test bun run test:e2e`
+   `GBRAIN_E2E_DATABASE_URL=postgresql://postgres:***@localhost:PORT/gbrain_test bun run test:e2e`
 5. **Tear down immediately after tests finish (pass or fail):**
    `docker stop gbrain-test-pg && docker rm gbrain-test-pg`
 

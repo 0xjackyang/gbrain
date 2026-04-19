@@ -6,7 +6,7 @@
  * Covers first sync, incremental add/modify/delete, and the critical
  * "edit → sync → search returns corrected text" flow.
  *
- * Run: DATABASE_URL=... bun test test/e2e/sync.test.ts
+ * Run: GBRAIN_E2E_DATABASE_URL=... bun test test/e2e/sync.test.ts
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
@@ -27,14 +27,14 @@ function execSync(command: string, opts: { cwd: string; stdio?: string; encoding
   return opts.encoding ? Buffer.from(result.stdout).toString(opts.encoding as BufferEncoding) : Buffer.from(result.stdout);
 }
 import {
-  hasDatabase, setupDB, teardownDB, getEngine,
+  hasDatabase, setupDB, teardownDB, getEngine, getDatabaseSkipReason,
 } from './helpers.ts';
 
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
 
 if (skip) {
-  console.log('Skipping E2E sync tests (DATABASE_URL not set)');
+  console.log(`Skipping E2E sync tests (${getDatabaseSkipReason()})`);
 }
 
 /** Create a temp git repo with initial markdown files */

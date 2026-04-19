@@ -26,10 +26,67 @@ if (existsSync(envPath)) {
     const key = trimmed.slice(0, eq);
     const val = trimmed.slice(eq + 1);
     if (!process.env[key]) process.env[key] = val;
+    // Back-compat: older .env.testing files used DATABASE_URL directly.
+    // Promote that value into the dedicated E2E variable, but DO NOT treat
+    // arbitrary ambient DATABASE_URL from the caller shell as safe.
+    if (key === 'DATABASE_URL' && !process.env.GBRAIN_E2E_DATABASE_URL) {
+      process.env.GBRAIN_E2E_DATABASE_URL = val;
+    }
   }
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
+function getDatabaseName(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.replace(/^\//, '');
+  } catch {
+    return '';
+  }
+}
+
+export function isSafeE2EDatabaseUrl(url: string): boolean {
+  const dbName = getDatabaseName(url);
+  return /(test|testing|e2e|ci|tmp)/i.test(dbName);
+}
+
+export function getE2EDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string | null {
+  return env.GBRAIN_E2E_DATABASE_URL || null;
+}
+
+export function getE2EDatabaseUrl(): string | null {
+  return getE2EDatabaseUrlFromEnv(process.env);
+}
+
+export function getDatabaseSkipReasonFromEnv(env: NodeJS.ProcessEnv): string {
+  if (getE2EDatabaseUrlFromEnv(env)) return '';
+  if (env.DATABASE_URL) {
+    return 'GBRAIN_E2E_DATABASE_URL not set (ambient DATABASE_URL is ignored for destructive E2E safety)';
+  }
+  return 'GBRAIN_E2E_DATABASE_URL not set';
+}
+
+export function getDatabaseSkipReason(): string {
+  return getDatabaseSkipReasonFromEnv(process.env);
+}
+
+function assertSafeE2EDatabaseUrl(url: string) {
+  if (process.env.GBRAIN_E2E_ALLOW_ANY_DB === '1') return;
+  if (isSafeE2EDatabaseUrl(url)) return;
+  const dbName = getDatabaseName(url) || '<unknown>';
+  throw new Error(
+    `Refusing destructive E2E tests against database '${dbName}'. ` +
+    'Use GBRAIN_E2E_DATABASE_URL pointing at a dedicated test/e2e/ci/tmp database, ' +
+    'or set GBRAIN_E2E_ALLOW_ANY_DB=1 only when you intentionally know it is isolated.',
+  );
+}
+
+const DATABASE_URL = getE2EDatabaseUrl();
+if (DATABASE_URL) {
+  assertSafeE2EDatabaseUrl(DATABASE_URL);
+  // Force all in-process and child-process DB lookups onto the dedicated E2E DB.
+  process.env.DATABASE_URL = DATABASE_URL;
+  process.env.GBRAIN_DATABASE_URL = DATABASE_URL;
+}
 const FIXTURES_DIR = resolve(import.meta.dir, 'fixtures');
 
 let engine: PostgresEngine | null = null;
@@ -60,7 +117,7 @@ export function hasDatabase(): boolean {
  */
 export async function setupDB(): Promise<PostgresEngine> {
   if (!DATABASE_URL) {
-    throw new Error('DATABASE_URL not set. Copy .env.testing.example to .env.testing and configure it.');
+    throw new Error(`${getDatabaseSkipReason()}. Copy .env.testing.example to .env.testing and configure a dedicated E2E DB.`);
   }
 
   // Disconnect any prior connection (clean slate)

@@ -2,9 +2,9 @@
  * E2E Mechanical Tests — Tier 1 (no API keys required)
  *
  * Tests all operations against a real Postgres+pgvector database.
- * Requires DATABASE_URL env var or .env.testing file.
+ * Requires GBRAIN_E2E_DATABASE_URL env var or .env.testing file.
  *
- * Run: DATABASE_URL=... bun test test/e2e/mechanical.test.ts
+ * Run: GBRAIN_E2E_DATABASE_URL=... bun test test/e2e/mechanical.test.ts
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
@@ -14,7 +14,7 @@ import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import {
   hasDatabase, setupDB, teardownDB, getEngine, getConn,
-  importFixtures, importFixture, time, dumpDBState, FIXTURES_PATH,
+  importFixtures, importFixture, time, dumpDBState, FIXTURES_PATH, getDatabaseSkipReason,
 } from './helpers.ts';
 import { operationsByName, operations } from '../../src/core/operations.ts';
 import type { OperationContext } from '../../src/core/operations.ts';
@@ -23,6 +23,10 @@ import { importFromContent } from '../../src/core/import-file.ts';
 // Skip all E2E tests if no database is configured
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
+
+if (skip) {
+  console.log(`Skipping E2E mechanical tests (${getDatabaseSkipReason()})`);
+}
 
 function makeCtx(): OperationContext {
   return {

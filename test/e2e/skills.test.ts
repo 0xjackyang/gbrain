@@ -5,18 +5,18 @@
  * Asserts on DB state changes, not LLM output text.
  *
  * Requires:
- *   - DATABASE_URL
+ *   - GBRAIN_E2E_DATABASE_URL
  *   - OPENAI_API_KEY
  *   - ANTHROPIC_API_KEY
  *   - openclaw CLI installed with at least one agent configured
  *
  * Skips gracefully if any dependency is missing.
- * Run: source ~/.zshrc && DATABASE_URL=... bun test test/e2e/skills.test.ts
+ * Run: source ~/.zshrc && GBRAIN_E2E_DATABASE_URL=... bun test test/e2e/skills.test.ts
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { join } from 'path';
-import { hasDatabase, setupDB, teardownDB, importFixtures, getEngine } from './helpers.ts';
+import { hasDatabase, setupDB, teardownDB, importFixtures, getEngine, getDatabaseSkipReason } from './helpers.ts';
 
 // Detect the default openclaw agent
 function detectAgent(): string | null {
@@ -39,7 +39,7 @@ function detectAgent(): string | null {
 
 // Check all Tier 2 dependencies
 function hasTier2Deps(): { ok: boolean; reason?: string; agent?: string } {
-  if (!hasDatabase()) return { ok: false, reason: 'DATABASE_URL not set' };
+  if (!hasDatabase()) return { ok: false, reason: getDatabaseSkipReason() };
   if (!process.env.OPENAI_API_KEY) return { ok: false, reason: 'OPENAI_API_KEY not set' };
   if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: 'ANTHROPIC_API_KEY not set' };
 

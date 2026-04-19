@@ -52,16 +52,22 @@ docs/                     Architecture docs
 ## Running tests
 
 ```bash
-bun test                          # all tests (unit + E2E skipped without DB)
+bun test                          # all tests (unit + E2E skipped without a dedicated E2E DB)
 bun test test/markdown.test.ts    # specific unit test
 
 # E2E tests (requires Postgres with pgvector)
 docker compose -f docker-compose.test.yml up -d
-DATABASE_URL=postgresql://postgres:postgres@localhost:5434/gbrain_test bun run test:e2e
+GBRAIN_E2E_DATABASE_URL=postgresql://postgres:***@localhost:5434/gbrain_test bun run test:e2e
 
-# Or use your own Postgres / Supabase
-DATABASE_URL=postgresql://... bun run test:e2e
+# Or use your own isolated Postgres / Supabase test database
+GBRAIN_E2E_DATABASE_URL=postgresql://.../gbrain_test bun run test:e2e
 ```
+
+Important: destructive E2E tests ignore ambient `DATABASE_URL` on purpose. That
+prevents mistakes like `DATABASE_URL=$GBRAIN_DATABASE_URL bun test ...` from
+truncating a live brain. If you must use a database whose name does not look
+like `test`/`e2e`/`ci`/`tmp`, set `GBRAIN_E2E_ALLOW_ANY_DB=1` only after
+verifying it is isolated.
 
 ## Building
 
