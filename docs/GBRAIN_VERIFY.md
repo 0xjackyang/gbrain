@@ -140,7 +140,7 @@ gbrain search "<text from the correction>"
 **If it returns old text:** Sync failed silently. Check:
 - Is the sync cron registered and running?
 - Is `gbrain sync --watch` still alive (if using watch mode)?
-- Run `gbrain config get sync.last_run` to see when sync last ran.
+- Run `gbrain sync --status --repo /data/brain` to see the repo-scoped last sync time and anchor commit.
 - Run `gbrain sync --repo /data/brain` manually and check for errors.
 - If you see `.begin() is not a function`, fix the pooler (see 4a above).
 
@@ -267,8 +267,8 @@ If this returns rows on a brain with person pages, the JSONB path is healthy.
 # 1. Schema
 gbrain doctor --json
 
-# 2. Sync recency
-gbrain config get sync.last_run
+# 2. Sync recency + anchor status
+gbrain sync --status --repo /data/brain
 
 # 3. Page count + embed coverage
 gbrain stats

@@ -111,11 +111,12 @@ Keeping it running and up to date.
 | `gbrain search "term"` | Keyword search across all brain pages |
 | `gbrain query "question"` | Hybrid search (vector + keyword + RRF) |
 | `gbrain get <slug>` | Read a specific brain page by slug |
-| `gbrain sync` | Sync local markdown repo to gbrain index |
+| `gbrain sync --repo <path>` | Sync a specific git-backed markdown repo into the index |
+| `gbrain sync --status [--repo <path>]` | Show the repo-scoped sync anchor, last sync time, and default sync target |
 | `gbrain import <path>` | Import files into the brain |
 | `gbrain embed --stale` | Re-embed pages with stale or missing embeddings |
 | `gbrain integrations` | Manage integration recipes (senses + reflexes) |
-| `gbrain stats` | Show brain statistics (page count, last sync, etc.) |
+| `gbrain stats` | Show brain statistics (page/chunk/embed counts by type) |
 | `gbrain doctor` | Diagnose brain health issues |
 | `gbrain check-update` | Check for new versions and integration recipes |
 

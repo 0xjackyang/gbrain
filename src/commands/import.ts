@@ -7,6 +7,7 @@ import { importFile } from '../core/import-file.ts';
 import { loadConfig } from '../core/config.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
+import { resolveRepoSyncIdentity, saveRepoSyncState } from '../core/sync-state.ts';
 
 function defaultWorkers(): number {
   const cpuCount = cpus().length;
@@ -225,10 +226,13 @@ export async function runImport(engine: BrainEngine, args: string[], opts: { com
   // Bug 9 — gate last_commit on "no failures" so import doesn't silently
   // stomp on the sync bookmark when parsing broke. We still write
   // last_run + repo_path either way (those are progress indicators).
+  // Fork: use repo-scoped sync-state identity so multi-repo setups don't collide.
   let gitHead: string | null = null;
+  let syncIdentity: ReturnType<typeof resolveRepoSyncIdentity> | null = null;
   try {
     if (existsSync(join(dir, '.git'))) {
-      gitHead = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+      syncIdentity = resolveRepoSyncIdentity(dir);
+      gitHead = execFileSync('git', ['-C', syncIdentity.repoPath, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
     }
   } catch {
     // Not a git repo or git not available
@@ -242,17 +246,20 @@ export async function runImport(engine: BrainEngine, args: string[], opts: { com
       const { recordSyncFailures } = await import('../core/sync.ts');
       recordSyncFailures(failures, gitHead);
     }
-    if (failures.length === 0) {
-      await engine.setConfig('sync.last_commit', gitHead);
-    } else {
+    if (failures.length === 0 && syncIdentity) {
+      // Use saveRepoSyncState: writes scoped keys (sync.state.<hash>.*) +
+      // shadow-writes legacy keys (sync.last_commit / last_run / repo_path) for compat.
+      await saveRepoSyncState(engine, syncIdentity, { lastCommit: gitHead });
+    } else if (failures.length > 0) {
       console.error(
         `\nImport completed with ${failures.length} failure(s). ` +
         `sync.last_commit NOT advanced — re-run 'gbrain sync' to retry, or ` +
         `'gbrain sync --skip-failed' to acknowledge and move past them.`,
       );
+      // Still advance last_run for progress tracking (upstream invariant).
+      await engine.setConfig('sync.last_run', new Date().toISOString());
+      await engine.setConfig('sync.repo_path', dir);
     }
-    await engine.setConfig('sync.last_run', new Date().toISOString());
-    await engine.setConfig('sync.repo_path', dir);
   }
 
   return { imported, skipped, errors, chunksCreated, failures };

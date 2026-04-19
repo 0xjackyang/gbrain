@@ -108,7 +108,7 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   const forceInline = args.includes('--inline');
 
   if (!repoPath) {
-    console.error('No repo path. Use --repo or run gbrain sync --repo first.');
+    console.error('No repo path. Use --repo or run gbrain sync --repo <path> once first.');
     process.exit(1);
   }
 

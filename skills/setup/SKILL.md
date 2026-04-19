@@ -419,5 +419,5 @@ Next steps:
 - `gbrain embed --stale` -- backfill missing embeddings
 - `gbrain sync --repo <path>` -- one-shot sync from brain repo
 - `gbrain sync --watch --repo <path>` -- continuous sync polling
-- `gbrain config get sync.last_run` -- check last sync timestamp
+- `gbrain sync --status --repo <path>` -- check repo-scoped last sync timestamp + anchor
 - `gbrain stats` -- page count + embed coverage
