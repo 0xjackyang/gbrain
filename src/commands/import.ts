@@ -5,6 +5,7 @@ import { cpus, totalmem, homedir } from 'os';
 import type { BrainEngine } from '../core/engine.ts';
 import { importFile } from '../core/import-file.ts';
 import { loadConfig } from '../core/config.ts';
+import { resolveRepoSyncIdentity, saveRepoSyncState } from '../core/sync-state.ts';
 
 function defaultWorkers(): number {
   const cpuCount = cpus().length;
@@ -198,13 +199,12 @@ export async function runImport(engine: BrainEngine, args: string[]) {
     summary: `Imported ${imported} pages, ${skipped} skipped, ${chunksCreated} chunks`,
   });
 
-  // Import → sync continuity: write sync checkpoint if this is a git repo
+  // Import → sync continuity: seed repo-scoped sync checkpoint if this is a git repo
   try {
     if (existsSync(join(dir, '.git'))) {
-      const head = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
-      await engine.setConfig('sync.last_commit', head);
-      await engine.setConfig('sync.last_run', new Date().toISOString());
-      await engine.setConfig('sync.repo_path', dir);
+      const identity = resolveRepoSyncIdentity(dir);
+      const head = execFileSync('git', ['-C', identity.repoPath, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+      await saveRepoSyncState(engine, identity, { lastCommit: head });
     }
   } catch {
     // Not a git repo or git not available, skip checkpoint

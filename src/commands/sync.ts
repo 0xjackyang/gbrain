@@ -1,8 +1,18 @@
 import { existsSync } from 'fs';
 import { execFileSync } from 'child_process';
-import { join, relative } from 'path';
+import { join } from 'path';
 import type { BrainEngine } from '../core/engine.ts';
 import { importFile } from '../core/import-file.ts';
+import {
+  adoptLegacySyncState,
+  getDefaultSyncRepoPath,
+  getScopedSyncState,
+  getSyncStatus,
+  resolveRepoSyncIdentity,
+  saveRepoSyncState,
+  type RepoSyncIdentity,
+  type RepoSyncStatus,
+} from '../core/sync-state.ts';
 import { buildSyncManifest, isSyncable, pathToSlug } from '../core/sync.ts';
 import type { SyncManifest } from '../core/sync.ts';
 
@@ -36,15 +46,18 @@ function git(repoPath: string, ...args: string[]): string {
 
 export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<SyncResult> {
   // Resolve repo path
-  const repoPath = opts.repoPath || await engine.getConfig('sync.repo_path');
-  if (!repoPath) {
-    throw new Error('No repo path specified. Use --repo or run gbrain init with --repo first.');
+  const requestedRepoPath = opts.repoPath || await getDefaultSyncRepoPath(engine);
+  if (!requestedRepoPath) {
+    throw new Error('No repo path specified. Use --repo or run gbrain sync --repo <path> once first.');
   }
 
   // Validate git repo
-  if (!existsSync(join(repoPath, '.git'))) {
-    throw new Error(`Not a git repository: ${repoPath}. GBrain sync requires a git-initialized repo.`);
+  if (!existsSync(join(requestedRepoPath, '.git'))) {
+    throw new Error(`Not a git repository: ${requestedRepoPath}. GBrain sync requires a git-initialized repo.`);
   }
+
+  const identity = resolveRepoSyncIdentity(requestedRepoPath);
+  const repoPath = identity.repoPath;
 
   // Git pull (unless --no-pull)
   if (!opts.noPull) {
@@ -69,7 +82,11 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   }
 
   // Read sync state
-  const lastCommit = opts.full ? null : await engine.getConfig('sync.last_commit');
+  let syncState = opts.full ? null : await getScopedSyncState(engine, identity);
+  if (!opts.full && !syncState?.lastCommit) {
+    syncState = await adoptLegacySyncState(engine, identity, headCommit) || syncState;
+  }
+  const lastCommit = opts.full ? null : syncState?.lastCommit || null;
 
   // Ancestry validation: if lastCommit exists, verify it's still in history
   if (lastCommit) {
@@ -77,7 +94,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
       git(repoPath, 'cat-file', '-t', lastCommit);
     } catch {
       console.error(`Sync anchor commit ${lastCommit.slice(0, 8)} missing (force push?). Running full reimport.`);
-      return performFullSync(engine, repoPath, headCommit, opts);
+      return performFullSync(engine, identity, headCommit, opts);
     }
 
     // Verify ancestry
@@ -85,17 +102,18 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
       git(repoPath, 'merge-base', '--is-ancestor', lastCommit, headCommit);
     } catch {
       console.error(`Sync anchor ${lastCommit.slice(0, 8)} is not an ancestor of HEAD. Running full reimport.`);
-      return performFullSync(engine, repoPath, headCommit, opts);
+      return performFullSync(engine, identity, headCommit, opts);
     }
   }
 
   // First sync
   if (!lastCommit) {
-    return performFullSync(engine, repoPath, headCommit, opts);
+    return performFullSync(engine, identity, headCommit, opts);
   }
 
   // No changes
   if (lastCommit === headCommit) {
+    await saveRepoSyncState(engine, identity, { lastCommit: headCommit });
     return {
       status: 'up_to_date',
       fromCommit: lastCommit,
@@ -157,8 +175,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
 
   if (totalChanges === 0) {
     // Update sync state even with no syncable changes (git advanced)
-    await engine.setConfig('sync.last_commit', headCommit);
-    await engine.setConfig('sync.last_run', new Date().toISOString());
+    await saveRepoSyncState(engine, identity, { lastCommit: headCommit });
     return {
       status: 'up_to_date',
       fromCommit: lastCommit,
@@ -231,9 +248,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   const elapsed = Date.now() - start;
 
   // Update sync state AFTER all changes succeed
-  await engine.setConfig('sync.last_commit', headCommit);
-  await engine.setConfig('sync.last_run', new Date().toISOString());
-  await engine.setConfig('sync.repo_path', repoPath);
+  await saveRepoSyncState(engine, identity, { lastCommit: headCommit });
 
   // Log ingest
   await engine.logIngest({
@@ -280,20 +295,18 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
 
 async function performFullSync(
   engine: BrainEngine,
-  repoPath: string,
+  identity: RepoSyncIdentity,
   headCommit: string,
   opts: SyncOpts,
 ): Promise<SyncResult> {
-  console.log(`Running full import of ${repoPath}...`);
+  console.log(`Running full import of ${identity.repoPath}...`);
   const { runImport } = await import('./import.ts');
-  const importArgs = [repoPath];
+  const importArgs = [identity.repoPath];
   if (opts.noEmbed) importArgs.push('--no-embed');
   await runImport(engine, importArgs);
 
-  // Persist sync state so next sync is incremental (C1 fix: was missing)
-  await engine.setConfig('sync.last_commit', headCommit);
-  await engine.setConfig('sync.last_run', new Date().toISOString());
-  await engine.setConfig('sync.repo_path', repoPath);
+  // Persist sync state so next sync is incremental.
+  await saveRepoSyncState(engine, identity, { lastCommit: headCommit });
 
   // Full sync doesn't track pagesAffected, so fall back to embed --stale
   if (!opts.noEmbed) {
@@ -314,14 +327,27 @@ async function performFullSync(
 }
 
 export async function runSync(engine: BrainEngine, args: string[]) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('Usage: gbrain sync [--repo <path>] [--dry-run] [--full] [--no-pull] [--no-embed]\n       gbrain sync --watch [--repo <path>] [--interval N]\n       gbrain sync --status [--repo <path>] [--json]\n\nSync a git-backed markdown repo into the brain.');
+    return;
+  }
+
   const repoPath = args.find((a, i) => args[i - 1] === '--repo') || undefined;
   const watch = args.includes('--watch');
+  const status = args.includes('--status');
+  const jsonMode = args.includes('--json');
   const intervalStr = args.find((a, i) => args[i - 1] === '--interval');
   const interval = intervalStr ? parseInt(intervalStr, 10) : 60;
   const dryRun = args.includes('--dry-run');
   const full = args.includes('--full');
   const noPull = args.includes('--no-pull');
   const noEmbed = args.includes('--no-embed');
+
+  if (status) {
+    const syncStatus = await getSyncStatus(engine, repoPath);
+    printSyncStatus(syncStatus, jsonMode);
+    return;
+  }
 
   const opts: SyncOpts = { repoPath, dryRun, full, noPull, noEmbed };
 
@@ -354,6 +380,20 @@ export async function runSync(engine: BrainEngine, args: string[]) {
     }
     await new Promise(r => setTimeout(r, interval * 1000));
   }
+}
+
+function printSyncStatus(status: RepoSyncStatus, jsonMode: boolean) {
+  if (jsonMode) {
+    console.log(JSON.stringify(status, null, 2));
+    return;
+  }
+
+  console.log(`Sync status for ${status.repoPath}:`);
+  console.log(`  Worktree slot: ${status.worktreeSlot}`);
+  console.log(`  Source: ${status.source}`);
+  console.log(`  Last sync: ${status.lastRun || 'never'}`);
+  console.log(`  Last commit: ${status.lastCommit ? status.lastCommit.slice(0, 8) : 'none'}`);
+  console.log(`  Default repo: ${status.defaultRepoPath === status.repoPath ? 'yes' : 'no'}`);
 }
 
 function printSyncResult(result: SyncResult) {

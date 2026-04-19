@@ -12,8 +12,20 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
 import { tmpdir } from 'os';
+
+process.env.PATH = `/usr/bin:/bin:${process.env.PATH || ''}`;
+
+function execSync(command: string, opts: { cwd: string; stdio?: string; encoding?: string }) {
+  const result = Bun.spawnSync(['/usr/bin/bash', '-lc', command], {
+    cwd: opts.cwd,
+    env: { ...process.env, PATH: `/usr/bin:/bin:${process.env.PATH || ''}` },
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`Command failed: ${command}\n${Buffer.from(result.stderr).toString('utf-8')}`);
+  }
+  return opts.encoding ? Buffer.from(result.stdout).toString(opts.encoding as BufferEncoding) : Buffer.from(result.stdout);
+}
 import {
   hasDatabase, setupDB, teardownDB, getEngine,
 } from './helpers.ts';
@@ -68,6 +80,42 @@ function createTestRepo(): string {
 
 function gitCommit(repoPath: string, message: string) {
   execSync(`git add -A && git commit -m "${message}"`, { cwd: repoPath, stdio: 'pipe' });
+}
+
+function createIsolatedRepo(label: string): string {
+  const dir = mkdtempSync(join(tmpdir(), `gbrain-sync-isolated-${label}-`));
+  execSync('git init', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  mkdirSync(join(dir, 'people'), { recursive: true });
+  mkdirSync(join(dir, 'concepts'), { recursive: true });
+
+  writeFileSync(join(dir, `people/${label}-user.md`), [
+    '---',
+    'type: person',
+    `title: ${label} user`,
+    '---',
+    '',
+    `${label} user exists for sync isolation tests.`,
+  ].join('\n'));
+
+  writeFileSync(join(dir, `concepts/${label}-concept.md`), [
+    '---',
+    'type: concept',
+    `title: ${label} concept`,
+    '---',
+    '',
+    `${label} concept exists for sync isolation tests.`,
+  ].join('\n'));
+
+  execSync('git add -A && git commit -m "initial commit"', { cwd: dir, stdio: 'pipe' });
+  return dir;
+}
+
+function createLinkedWorktree(repoPath: string, label: string): string {
+  const worktreePath = mkdtempSync(join(tmpdir(), `gbrain-sync-worktree-${label}-`));
+  execSync(`git worktree add -b ${label}-branch ${worktreePath}`, { cwd: repoPath, stdio: 'pipe' });
+  return worktreePath;
 }
 
 describeE2E('E2E: Git-to-DB Sync Pipeline', () => {
@@ -253,17 +301,19 @@ describeE2E('E2E: Git-to-DB Sync Pipeline', () => {
     expect(ops).toBeNull();
   });
 
-  test('sync stores last_commit and last_run in config', async () => {
+  test('sync stores repo-scoped state and default repo path in config', async () => {
     const engine = getEngine();
+    const { getScopedSyncState, resolveRepoSyncIdentity } = await import('../../src/core/sync-state.ts');
 
-    const lastCommit = await engine.getConfig('sync.last_commit');
-    const lastRun = await engine.getConfig('sync.last_run');
+    const identity = resolveRepoSyncIdentity(repoPath);
+    const scoped = await getScopedSyncState(engine, identity);
     const repoPathConfig = await engine.getConfig('sync.repo_path');
 
-    expect(lastCommit).toBeTruthy();
-    expect(lastCommit!.length).toBe(40); // full SHA
-    expect(lastRun).toBeTruthy();
-    expect(repoPathConfig).toBe(repoPath);
+    expect(scoped.lastCommit).toBeTruthy();
+    expect(scoped.lastCommit!.length).toBe(40);
+    expect(scoped.lastRun).toBeTruthy();
+    expect(scoped.repoPath).toBe(identity.repoPath);
+    expect(repoPathConfig).toBe(identity.repoPath);
   });
 
   test('sync logs to ingest_log', async () => {
@@ -393,4 +443,150 @@ describeE2E('E2E: Git-to-DB Sync Pipeline', () => {
     expect(page).not.toBeNull();
     expect(page!.title).toBe('Draft Meeting Notes');
   });
+  test('sync anchors stay isolated across repos', async () => {
+    const { performSync } = await import('../../src/commands/sync.ts');
+    const { getScopedSyncState, resolveRepoSyncIdentity } = await import('../../src/core/sync-state.ts');
+    const engine = getEngine();
+    const repoA = createIsolatedRepo('alpha');
+    const repoB = createIsolatedRepo('beta');
+
+    try {
+      let result = await performSync(engine, {
+        repoPath: repoA,
+        noPull: true,
+        noEmbed: true,
+      });
+      expect(result.status).toBe('first_sync');
+
+      result = await performSync(engine, {
+        repoPath: repoB,
+        noPull: true,
+        noEmbed: true,
+      });
+      expect(result.status).toBe('first_sync');
+
+      writeFileSync(join(repoA, 'people/alpha-two.md'), [
+        '---',
+        'type: person',
+        'title: alpha two',
+        '---',
+        '',
+        'alpha two exists to verify repo-scoped sync state.',
+      ].join('\n'));
+      gitCommit(repoA, 'add alpha two');
+
+      result = await performSync(engine, {
+        repoPath: repoA,
+        noPull: true,
+        noEmbed: true,
+      });
+
+      expect(result.status).toBe('synced');
+      expect(result.added).toBe(1);
+      expect(result.pagesAffected).toContain('people/alpha-two');
+
+      const stateA = await getScopedSyncState(engine, resolveRepoSyncIdentity(repoA));
+      const stateB = await getScopedSyncState(engine, resolveRepoSyncIdentity(repoB));
+      expect(stateA.lastCommit).toBeTruthy();
+      expect(stateB.lastCommit).toBeTruthy();
+      expect(stateA.lastCommit).not.toBe(stateB.lastCommit);
+    } finally {
+      rmSync(repoA, { recursive: true, force: true });
+      rmSync(repoB, { recursive: true, force: true });
+    }
+  });
+
+  test('sync anchors stay isolated across linked worktrees', async () => {
+    const { performSync } = await import('../../src/commands/sync.ts');
+    const { getScopedSyncState, resolveRepoSyncIdentity } = await import('../../src/core/sync-state.ts');
+    const engine = getEngine();
+    const mainRepo = createIsolatedRepo('gamma');
+    const worktreeRepo = createLinkedWorktree(mainRepo, 'gamma');
+
+    try {
+      let result = await performSync(engine, {
+        repoPath: mainRepo,
+        noPull: true,
+        noEmbed: true,
+      });
+      expect(result.status).toBe('first_sync');
+
+      writeFileSync(join(worktreeRepo, 'people/gamma-user.md'), [
+        '---',
+        'type: person',
+        'title: gamma user',
+        '---',
+        '',
+        'gamma user changed in the linked worktree.',
+      ].join('\n'));
+      gitCommit(worktreeRepo, 'worktree update gamma user');
+
+      result = await performSync(engine, {
+        repoPath: worktreeRepo,
+        noPull: true,
+        noEmbed: true,
+      });
+      expect(['first_sync', 'synced']).toContain(result.status);
+
+      writeFileSync(join(mainRepo, 'people/gamma-main.md'), [
+        '---',
+        'type: person',
+        'title: gamma main',
+        '---',
+        '',
+        'gamma main exists to verify the main worktree keeps its own anchor.',
+      ].join('\n'));
+      gitCommit(mainRepo, 'main worktree update');
+
+      result = await performSync(engine, {
+        repoPath: mainRepo,
+        noPull: true,
+        noEmbed: true,
+      });
+
+      expect(result.status).toBe('synced');
+      expect(result.added).toBe(1);
+      expect(result.pagesAffected).toContain('people/gamma-main');
+
+      const mainState = await getScopedSyncState(engine, resolveRepoSyncIdentity(mainRepo));
+      const worktreeState = await getScopedSyncState(engine, resolveRepoSyncIdentity(worktreeRepo));
+      expect(mainState.lastCommit).toBeTruthy();
+      expect(worktreeState.lastCommit).toBeTruthy();
+      expect(mainState.lastCommit).not.toBe(worktreeState.lastCommit);
+    } finally {
+      try {
+        execSync(`git worktree remove --force ${worktreeRepo}`, { cwd: mainRepo, stdio: 'pipe' });
+      } catch {
+        rmSync(worktreeRepo, { recursive: true, force: true });
+      }
+      rmSync(mainRepo, { recursive: true, force: true });
+    }
+  });
+
+  test('import seeds repo-scoped state for a later sync', async () => {
+    const { runImport } = await import('../../src/commands/import.ts');
+    const { performSync } = await import('../../src/commands/sync.ts');
+    const { getScopedSyncState, resolveRepoSyncIdentity } = await import('../../src/core/sync-state.ts');
+    const engine = getEngine();
+    const importRepo = createIsolatedRepo('delta');
+
+    try {
+      await runImport(engine, [importRepo, '--no-embed']);
+
+      const identity = resolveRepoSyncIdentity(importRepo);
+      const scoped = await getScopedSyncState(engine, identity);
+      expect(scoped.lastCommit).toBeTruthy();
+
+      const result = await performSync(engine, {
+        repoPath: importRepo,
+        noPull: true,
+        noEmbed: true,
+      });
+
+      expect(result.status).toBe('up_to_date');
+    } finally {
+      rmSync(importRepo, { recursive: true, force: true });
+    }
+  });
+
 });
