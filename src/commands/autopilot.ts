@@ -57,7 +57,7 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   const jsonMode = args.includes('--json');
 
   if (!repoPath) {
-    console.error('No repo path. Use --repo or run gbrain sync --repo first.');
+    console.error('No repo path. Use --repo or run gbrain sync --repo <path> once first.');
     process.exit(1);
   }
 
@@ -165,7 +165,7 @@ function plistPath(): string {
 async function installDaemon(engine: BrainEngine, args: string[]) {
   const repoPath = parseArg(args, '--repo') || await engine.getConfig('sync.repo_path');
   if (!repoPath) {
-    console.error('No repo path. Use --repo or run gbrain sync --repo first.');
+    console.error('No repo path. Use --repo or run gbrain sync --repo <path> once first.');
     process.exit(1);
   }
 
