@@ -343,6 +343,10 @@ ADMIN
 
 Run `gbrain --help` for the full reference.
 
+Postgres note: `~/.gbrain/config.json` stores only `{ "engine": "postgres" }`.
+Set `GBRAIN_DATABASE_URL` (or `DATABASE_URL`) in the environment so stale on-disk
+URLs cannot silently drift your CLI onto the wrong database.
+
 ## Origin Story
 
 I was setting up my [OpenClaw](https://openclaw.ai) agent and started a markdown brain repo. One page per person, one page per company, compiled truth on top, timeline on the bottom. Within a week: 10,000+ files, 3,000+ people, 13 years of calendar data, 280+ meeting transcripts, 300+ captured ideas.

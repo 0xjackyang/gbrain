@@ -28,6 +28,12 @@ if (skip) {
   console.log(`Skipping E2E mechanical tests (${getDatabaseSkipReason()})`);
 }
 
+const CLI_HOME = mkdtempSync(join(tmpdir(), 'gbrain-cli-home-'));
+const CLI_ENV_BASE = { HOME: CLI_HOME, USERPROFILE: CLI_HOME };
+process.on('exit', () => {
+  rmSync(CLI_HOME, { recursive: true, force: true });
+});
+
 function makeCtx(): OperationContext {
   return {
     engine: getEngine(),
@@ -563,7 +569,12 @@ describeE2E('E2E: Setup Journey', () => {
   afterAll(teardownDB);
 
   const cliCwd = join(import.meta.dir, '../..');
-  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL! });
+  const cliEnv = () => ({
+    ...process.env,
+    ...CLI_ENV_BASE,
+    DATABASE_URL: process.env.DATABASE_URL!,
+    GBRAIN_DATABASE_URL: process.env.DATABASE_URL!,
+  });
 
   test('gbrain init --non-interactive connects and initializes', () => {
     const result = Bun.spawnSync({
@@ -630,7 +641,7 @@ describeE2E('E2E: Init Edge Cases', () => {
   afterAll(teardownDB);
 
   test('init --non-interactive without URL fails gracefully', () => {
-    const env = { ...process.env };
+    const env = { ...process.env, ...CLI_ENV_BASE };
     delete env.DATABASE_URL;
     delete env.GBRAIN_DATABASE_URL;
     const result = Bun.spawnSync({
@@ -823,7 +834,12 @@ describeE2E('E2E: Doctor Command', () => {
   afterAll(teardownDB);
 
   const cliCwd = join(import.meta.dir, '../..');
-  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, GBRAIN_DATABASE_URL: process.env.DATABASE_URL! });
+  const cliEnv = () => ({
+    ...process.env,
+    ...CLI_ENV_BASE,
+    DATABASE_URL: process.env.DATABASE_URL!,
+    GBRAIN_DATABASE_URL: process.env.DATABASE_URL!,
+  });
 
   test('gbrain doctor exits 0 on healthy DB', () => {
     // Init first so config exists for CLI
@@ -868,7 +884,12 @@ describeE2E('E2E: Parallel Import', () => {
   afterAll(teardownDB);
 
   const cliCwd = join(import.meta.dir, '../..');
-  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, GBRAIN_DATABASE_URL: process.env.DATABASE_URL! });
+  const cliEnv = () => ({
+    ...process.env,
+    ...CLI_ENV_BASE,
+    DATABASE_URL: process.env.DATABASE_URL!,
+    GBRAIN_DATABASE_URL: process.env.DATABASE_URL!,
+  });
 
   function initCli() {
     Bun.spawnSync({

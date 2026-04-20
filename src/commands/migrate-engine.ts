@@ -93,7 +93,7 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
   if (opts.targetEngine === 'postgres') {
     targetConfig.database_url = opts.targetUrl || process.env.GBRAIN_DATABASE_URL || process.env.DATABASE_URL;
     if (!targetConfig.database_url) {
-      console.error('Target is Supabase but no connection string provided. Use: --url <connection_string>');
+      console.error('Target is Supabase but no connection string provided. Use: --url <connection_string> or set GBRAIN_DATABASE_URL/DATABASE_URL.');
       process.exit(1);
     }
   } else {
@@ -228,9 +228,9 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
   // Update local config
   const newConfig: GBrainConfig = {
     engine: opts.targetEngine,
-    ...(opts.targetEngine === 'postgres'
-      ? { database_url: targetConfig.database_url }
-      : { database_path: targetConfig.database_path }),
+    ...(opts.targetEngine === 'pglite'
+      ? { database_path: targetConfig.database_path }
+      : {}),
   };
   saveConfig(newConfig);
 
@@ -239,7 +239,11 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
   await targetEngine.disconnect();
 
   console.log(`\nMigration complete. ${migrated} pages transferred.`);
-  console.log(`Config updated to engine: ${opts.targetEngine}`);
+  if (opts.targetEngine === 'postgres') {
+    console.log('Config updated to engine: postgres (URL not persisted; use GBRAIN_DATABASE_URL or DATABASE_URL).');
+  } else {
+    console.log(`Config updated to engine: ${opts.targetEngine}`);
+  }
   if (config.engine === 'pglite' && config.database_path) {
     console.log(`Original PGLite brain preserved at ${config.database_path} (backup).`);
   }

@@ -192,6 +192,9 @@ RRF fusion, multi-query expansion, and 4-layer dedup are engine-agnostic. They o
    ```
    The factory uses dynamic imports so engines are only loaded when selected.
 3. Store engine type in `~/.gbrain/config.json`: `{ "engine": "myengine", ... }`
+   - Built-in `postgres` is intentionally env-authoritative: the file stores only
+     `{ "engine": "postgres" }`, while the live connection string comes from
+     `GBRAIN_DATABASE_URL` / `DATABASE_URL`.
 4. Add tests. The test suite should be engine-agnostic where possible... same test cases, different engine constructor.
 5. Document in this file + add a design doc in `docs/`
 
