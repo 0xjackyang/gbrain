@@ -1,6 +1,7 @@
 import postgres from 'postgres';
 import { GBrainError, type EngineConfig } from './types.ts';
 import { SCHEMA_SQL } from './schema-embedded.ts';
+import { POSTGRES_DATABASE_URL_CAUSE, POSTGRES_DATABASE_URL_FIX } from './config.ts';
 
 let sql: ReturnType<typeof postgres> | null = null;
 let connectedUrl: string | null = null;
@@ -10,7 +11,7 @@ export function getConnection(): ReturnType<typeof postgres> {
     throw new GBrainError(
       'No database connection',
       'connect() has not been called',
-      'Run gbrain init --supabase or gbrain init --url <connection_string>',
+      'Run gbrain init for PGLite, or export GBRAIN_DATABASE_URL / DATABASE_URL for Postgres',
     );
   }
   return sql;
@@ -29,8 +30,8 @@ export async function connect(config: EngineConfig): Promise<void> {
   if (!url) {
     throw new GBrainError(
       'No database URL',
-      'database_url is missing from config',
-      'Run gbrain init --supabase or gbrain init --url <connection_string>',
+      POSTGRES_DATABASE_URL_CAUSE,
+      POSTGRES_DATABASE_URL_FIX,
     );
   }
 
@@ -55,7 +56,7 @@ export async function connect(config: EngineConfig): Promise<void> {
     throw new GBrainError(
       'Cannot connect to database',
       msg,
-      'Check your connection URL in ~/.gbrain/config.json',
+      'Check GBRAIN_DATABASE_URL or DATABASE_URL (Postgres URLs are not read from ~/.gbrain/config.json)',
     );
   }
 }

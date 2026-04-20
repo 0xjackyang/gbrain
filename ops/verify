@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+MODE="${1:-}"
+JSON="${2:-}"
+if [[ -z "$MODE" || "$JSON" != "--json" ]]; then
+  echo '{"ok":false,"mode":"invalid","message":"usage: ./ops/verify <fast|standard|live> --json"}'
+  exit 1
+fi
+PATH="/home/jackyujieyang/.bun/bin:${PATH}"
+case "$MODE" in
+  fast)
+    bun test test/cli.test.ts test/doctor.test.ts test/resolver.test.ts >/tmp/gbrain-verify-fast.log 2>&1
+    echo '{"ok":true,"mode":"fast","commands":["bun test test/cli.test.ts test/doctor.test.ts test/resolver.test.ts"]}'
+    ;;
+  standard)
+    bun test >/tmp/gbrain-verify-standard.log 2>&1
+    echo '{"ok":true,"mode":"standard","commands":["bun test"]}'
+    ;;
+  live)
+    if [[ -z "${GBRAIN_DATABASE_URL:-${DATABASE_URL:-}}" ]]; then
+      echo '{"ok":false,"mode":"live","message":"GBRAIN_DATABASE_URL or DATABASE_URL must be set for live verify"}'
+      exit 1
+    fi
+    bun run src/cli.ts doctor --json >/tmp/gbrain-verify-live-doctor.json
+    bun run src/cli.ts stats >/tmp/gbrain-verify-live-stats.txt
+    echo '{"ok":true,"mode":"live","commands":["bun run src/cli.ts doctor --json","bun run src/cli.ts stats"]}'
+    ;;
+  *)
+    echo '{"ok":false,"mode":"invalid","message":"mode must be one of fast, standard, live"}'
+    exit 1
+    ;;
+esac

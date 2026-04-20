@@ -17,6 +17,7 @@ import type {
 } from './types.ts';
 import { GBrainError } from './types.ts';
 import * as db from './db.ts';
+import { POSTGRES_DATABASE_URL_CAUSE, POSTGRES_DATABASE_URL_FIX } from './config.ts';
 import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult, tryParseEmbedding } from './utils.ts';
 
 export class PostgresEngine implements BrainEngine {
@@ -33,7 +34,13 @@ export class PostgresEngine implements BrainEngine {
     if (config.poolSize) {
       // Instance-level connection for worker isolation
       const url = config.database_url;
-      if (!url) throw new GBrainError('No database URL', 'database_url is missing', 'Provide --url');
+      if (!url) {
+        throw new GBrainError(
+          'No database URL',
+          POSTGRES_DATABASE_URL_CAUSE,
+          POSTGRES_DATABASE_URL_FIX,
+        );
+      }
       this._sql = postgres(url, {
         max: config.poolSize,
         idle_timeout: 20,
