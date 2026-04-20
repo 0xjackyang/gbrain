@@ -10,6 +10,10 @@ import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts'
 import type { DbUrlSource } from '../core/config.ts';
 import { join } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface Check {
   name: string;
