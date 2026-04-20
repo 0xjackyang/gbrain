@@ -49,7 +49,7 @@ export async function runInit(args: string[]) {
     if (envUrl) {
       databaseUrl = envUrl;
     } else {
-      console.error('--non-interactive requires --url <connection_string> or GBRAIN_DATABASE_URL env var');
+      console.error('--non-interactive requires --url <connection_string> or GBRAIN_DATABASE_URL/DATABASE_URL env var');
       process.exit(1);
     }
   } else {
@@ -141,11 +141,13 @@ async function initPostgres(opts: { databaseUrl: string; jsonOutput: boolean; ap
 
   const config: GBrainConfig = {
     engine: 'postgres',
-    database_url: databaseUrl,
     ...(opts.apiKey ? { openai_api_key: opts.apiKey } : {}),
   };
   saveConfig(config);
-  console.log('Config saved to ~/.gbrain/config.json');
+  if (!opts.jsonOutput) {
+    console.log('Config saved to ~/.gbrain/config.json (engine only).');
+    console.log('Postgres URL must come from GBRAIN_DATABASE_URL or DATABASE_URL.');
+  }
 
   const stats = await engine.getStats();
   await engine.disconnect();
