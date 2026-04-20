@@ -2,8 +2,12 @@ import type { BrainEngine } from '../core/engine.ts';
 import * as db from '../core/db.ts';
 import { LATEST_VERSION, getSchemaVersionState } from '../core/migrate.ts';
 import { checkResolvable } from '../core/check-resolvable.ts';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export const DOCTOR_HELP = `Usage: gbrain doctor [--json] [--fast]
 
@@ -280,9 +284,19 @@ export async function runDoctor(engine: BrainEngine | null, args: string[]) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Find the GBrain repo root by walking up from cwd looking for skills/RESOLVER.md */
+/** Resolve the skills-bearing GBrain root from cwd first, then the bundled install. */
 function findRepoRoot(): string | null {
-  let dir = process.cwd();
+  const cwdRoot = findRepoRootFrom(process.cwd());
+  if (cwdRoot) return cwdRoot;
+
+  const bundledRoot = dirname(dirname(__dirname));
+  if (existsSync(join(bundledRoot, 'skills', 'RESOLVER.md'))) return bundledRoot;
+
+  return null;
+}
+
+function findRepoRootFrom(startDir: string): string | null {
+  let dir = startDir;
   for (let i = 0; i < 10; i++) {
     if (existsSync(join(dir, 'skills', 'RESOLVER.md'))) return dir;
     const parent = join(dir, '..');

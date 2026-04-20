@@ -51,6 +51,32 @@ describe('doctor command', () => {
     }
   });
 
+  test('doctor finds bundled skills even when invoked outside a repo checkout', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gbrain-doctor-'));
+    const cliPath = new URL('../src/cli.ts', import.meta.url).pathname;
+    try {
+      const result = Bun.spawnSync({
+        cmd: ['bun', 'run', cliPath, 'doctor', '--fast', '--json'],
+        cwd: tempDir,
+        env: {
+          ...process.env,
+          DATABASE_URL: '',
+          GBRAIN_DATABASE_URL: '',
+        },
+      });
+      const stdout = new TextDecoder().decode(result.stdout);
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(stdout) as {
+        checks: Array<{ name: string; status: string; message: string }>;
+      };
+      const resolver = payload.checks.find(check => check.name === 'resolver_health');
+      expect(resolver?.status).toBe('ok');
+      expect(resolver?.message).toContain('skills');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test('Check interface supports issues array', async () => {
     const { Check } = await import('../src/commands/doctor.ts');
     // The Check type allows an optional issues array for resolver findings
