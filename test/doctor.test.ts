@@ -1,4 +1,7 @@
 import { describe, test, expect } from 'bun:test';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 describe('doctor command', () => {
   test('doctor module exports runDoctor', async () => {
@@ -20,6 +23,32 @@ describe('doctor command', () => {
     expect(stdout).toContain('doctor');
     expect(stdout).toContain('--fast');
     expect(stdout).toContain('migrate-schema-version');
+  });
+
+  test('CLI-only maintenance help works without config or DB access', async () => {
+    const tempHome = mkdtempSync(join(tmpdir(), 'gbrain-help-'));
+    try {
+      for (const command of ['doctor', 'repair-jsonb', 'migrate-schema-version']) {
+        const result = Bun.spawnSync({
+          cmd: ['bun', 'run', 'src/cli.ts', command, '--help'],
+          cwd: import.meta.dir + '/..',
+          env: {
+            ...process.env,
+            HOME: tempHome,
+            USERPROFILE: tempHome,
+            DATABASE_URL: '',
+            GBRAIN_DATABASE_URL: '',
+          },
+        });
+        const stdout = new TextDecoder().decode(result.stdout);
+        const stderr = new TextDecoder().decode(result.stderr);
+        expect(result.exitCode).toBe(0);
+        expect(stdout).toContain(`Usage: gbrain ${command}`);
+        expect(stderr).not.toContain('No brain configured');
+      }
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 
   test('Check interface supports issues array', async () => {

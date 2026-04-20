@@ -49,6 +49,9 @@ async function main() {
 
   // Per-command --help
   if (subArgs.includes('--help') || subArgs.includes('-h')) {
+    if (await tryPrintCliOnlyHelp(command)) {
+      return;
+    }
     const op = cliOps.get(command);
     if (op) {
       printOpHelp(op);
@@ -398,6 +401,28 @@ async function connectEngine(): Promise<BrainEngine> {
   const engine = await createEngine(toEngineConfig(config));
   await engine.connect(toEngineConfig(config));
   return engine;
+}
+
+async function tryPrintCliOnlyHelp(command: string): Promise<boolean> {
+  switch (command) {
+    case 'doctor': {
+      const { printDoctorHelp } = await import('./commands/doctor.ts');
+      printDoctorHelp();
+      return true;
+    }
+    case 'repair-jsonb': {
+      const { printRepairJsonbHelp } = await import('./commands/repair-jsonb.ts');
+      printRepairJsonbHelp();
+      return true;
+    }
+    case 'migrate-schema-version': {
+      const { printMigrateSchemaVersionHelp } = await import('./commands/migrate-schema-version.ts');
+      printMigrateSchemaVersionHelp();
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 function printOpHelp(op: Operation) {

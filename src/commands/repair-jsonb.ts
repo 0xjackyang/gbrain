@@ -21,6 +21,18 @@ import { loadConfig, toEngineConfig } from '../core/config.ts';
 import type { EngineConfig } from '../core/types.ts';
 import * as db from '../core/db.ts';
 
+export const REPAIR_JSONB_HELP = `Usage: gbrain repair-jsonb [--dry-run] [--json]
+
+Repair legacy Postgres JSONB rows that were double-encoded as string literals.
+
+Options:
+  --dry-run   Preview how many rows would be repaired without writing
+  --json      Emit machine-readable JSON output`;
+
+export function printRepairJsonbHelp(): void {
+  console.log(REPAIR_JSONB_HELP);
+}
+
 export interface RepairTarget {
   table: string;
   column: string;
@@ -134,6 +146,11 @@ export async function repairJsonb(opts: RepairOpts = { dryRun: false }): Promise
 }
 
 export async function runRepairJsonbCli(args: string[]): Promise<void> {
+  if (args.includes('--help') || args.includes('-h')) {
+    printRepairJsonbHelp();
+    return;
+  }
+
   const dryRun = args.includes('--dry-run');
   const jsonMode = args.includes('--json');
   const result = await repairJsonb({ dryRun });

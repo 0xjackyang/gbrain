@@ -7,6 +7,7 @@ import {
   canonicalizeLegacySchemaVersion,
   runMigrations,
 } from '../src/core/migrate.ts';
+import { runMigrateSchemaVersion } from '../src/commands/migrate-schema-version.ts';
 
 function makeMockEngine(seed: Record<string, string> = {}): BrainEngine {
   const store = new Map(Object.entries(seed));
@@ -111,5 +112,29 @@ describe('schema-version helpers', () => {
       { version: 4, name: 'access_tokens_and_mcp_log' },
     ]);
     expect(getPendingMigrations(LATEST_VERSION)).toEqual([]);
+  });
+
+  test('runMigrateSchemaVersion --help short-circuits before touching the engine', async () => {
+    let touched = false;
+    const engine = {
+      async initSchema() { touched = true; },
+      async getConfig() { touched = true; return null; },
+      async setConfig() { touched = true; },
+    } as unknown as BrainEngine;
+
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map((arg) => String(arg)).join(' '));
+    };
+
+    try {
+      await runMigrateSchemaVersion(engine, ['--help']);
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(touched).toBe(false);
+    expect(logs.join('\n')).toContain('Usage: gbrain migrate-schema-version');
   });
 });

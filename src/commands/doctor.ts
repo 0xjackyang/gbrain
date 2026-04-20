@@ -5,6 +5,18 @@ import { checkResolvable } from '../core/check-resolvable.ts';
 import { join } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 
+export const DOCTOR_HELP = `Usage: gbrain doctor [--json] [--fast]
+
+Run GBrain health checks.
+
+Options:
+  --json   Emit machine-readable JSON output
+  --fast   Filesystem-only checks; skip database connectivity and health probes`;
+
+export function printDoctorHelp(): void {
+  console.log(DOCTOR_HELP);
+}
+
 export interface Check {
   name: string;
   status: 'ok' | 'warn' | 'fail';
@@ -18,6 +30,11 @@ export interface Check {
  * DB checks run only if engine is provided.
  */
 export async function runDoctor(engine: BrainEngine | null, args: string[]) {
+  if (args.includes('--help') || args.includes('-h')) {
+    printDoctorHelp();
+    return;
+  }
+
   const jsonOutput = args.includes('--json');
   const fastMode = args.includes('--fast');
   const checks: Check[] = [];

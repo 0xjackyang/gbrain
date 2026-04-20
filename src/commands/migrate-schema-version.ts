@@ -5,6 +5,19 @@ import {
   getSchemaVersionState,
 } from '../core/migrate.ts';
 
+export const MIGRATE_SCHEMA_VERSION_HELP = `Usage: gbrain migrate-schema-version [--dry-run] [--json]
+
+Canonicalize a legacy schema_version config key into the canonical version key,
+then run any pending schema migrations.
+
+Options:
+  --dry-run   Preview the detected version state and pending migrations without writing
+  --json      Emit machine-readable JSON output`;
+
+export function printMigrateSchemaVersionHelp(): void {
+  console.log(MIGRATE_SCHEMA_VERSION_HELP);
+}
+
 function detectEngine(engine: BrainEngine): 'postgres' | 'pglite' | 'unknown' {
   const name = engine.constructor?.name || '';
   if (name.includes('Postgres')) return 'postgres';
@@ -36,6 +49,11 @@ function countAppliedMigrations(logs: string[]): number {
 }
 
 export async function runMigrateSchemaVersion(engine: BrainEngine, args: string[]) {
+  if (args.includes('--help') || args.includes('-h')) {
+    printMigrateSchemaVersionHelp();
+    return;
+  }
+
   const dryRun = args.includes('--dry-run');
   const jsonOutput = args.includes('--json');
 
