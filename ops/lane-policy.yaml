@@ -1,0 +1,28 @@
+version: 1
+repo: gbrain
+role: personal knowledge brain engine, schema, CLI, and MCP surface
+wave: wave2
+write_mode: branch_write
+default_verify_mode: live
+verify_commands:
+  fast: ./ops/verify fast --json
+  standard: ./ops/verify standard --json
+  live: ./ops/verify live --json
+branch_prefix: lane/gbrain
+merge_policy: explicit_human_before_merge
+approvals: [brain_engine, schema]
+risky_paths:
+  - CLAUDE.md
+  - RESOLVER.md
+  - src/core/**
+  - src/commands/**
+  - src/mcp/**
+  - src/schema.sql
+  - test/**
+  - docs/**
+generated_artifacts:
+  - node_modules/
+  - .pytest_cache/
+  - build/
+  - dist/
+rollback_hint: Prefer to drop or reset the packet worktree to its base ref; do not hot-edit the base gbrain checkout.
