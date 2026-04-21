@@ -242,6 +242,38 @@ describe('PGLiteEngine: Chunks', () => {
     expect(chunks.length).toBe(1);
     expect(chunks[0].embedding).not.toBeNull();
   });
+
+  test('new null-vector chunks keep embedded_at null', async () => {
+    await engine.putPage('test/null-new', testPage);
+    await engine.upsertChunks('test/null-new', [
+      { chunk_index: 0, chunk_text: 'No embedding yet', chunk_source: 'compiled_truth' },
+    ]);
+
+    const chunks = await engine.getChunksWithEmbeddings('test/null-new');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].embedding).toBeNull();
+    expect(chunks[0].embedded_at).toBeNull();
+  });
+
+  test('updated chunks clear embedded_at when the replacement vector is missing', async () => {
+    await engine.putPage('test/null-update', testPage);
+    const embedding = new Float32Array(1536).fill(0.2);
+    await engine.upsertChunks('test/null-update', [
+      { chunk_index: 0, chunk_text: 'Original text', chunk_source: 'compiled_truth', embedding },
+    ]);
+
+    let chunks = await engine.getChunksWithEmbeddings('test/null-update');
+    expect(chunks[0].embedding).not.toBeNull();
+    expect(chunks[0].embedded_at).not.toBeNull();
+
+    await engine.upsertChunks('test/null-update', [
+      { chunk_index: 0, chunk_text: 'Updated text with failed embed', chunk_source: 'compiled_truth' },
+    ]);
+
+    chunks = await engine.getChunksWithEmbeddings('test/null-update');
+    expect(chunks[0].embedding).toBeNull();
+    expect(chunks[0].embedded_at).toBeNull();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -443,6 +475,26 @@ describe('PGLiteEngine: Stats & Health', () => {
     const health = await engine.getHealth();
     expect(health.page_count).toBe(1);
     expect(health.missing_embeddings).toBe(1); // chunk has no embedding
+    expect(health.embed_coverage).toBe(0);
+  });
+
+  test('health and stats count hidden-null chunks by actual vector presence', async () => {
+    await truncateAll();
+    await engine.putPage('test/hidden-null', testPage);
+    await engine.upsertChunks('test/hidden-null', [
+      { chunk_index: 0, chunk_text: 'missing vector', chunk_source: 'compiled_truth' },
+    ]);
+    await (engine as any).db.exec(`
+      UPDATE content_chunks
+      SET embedded_at = now()
+      WHERE page_id = (SELECT id FROM pages WHERE slug = 'test/hidden-null')
+    `);
+
+    const stats = await engine.getStats();
+    const health = await engine.getHealth();
+
+    expect(stats.embedded_count).toBe(0);
+    expect(health.missing_embeddings).toBe(1);
     expect(health.embed_coverage).toBe(0);
   });
 });

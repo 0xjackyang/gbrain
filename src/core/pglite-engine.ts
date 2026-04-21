@@ -295,7 +295,12 @@ export class PGLiteEngine implements BrainEngine {
          embedding = CASE WHEN EXCLUDED.chunk_text != content_chunks.chunk_text THEN EXCLUDED.embedding ELSE COALESCE(EXCLUDED.embedding, content_chunks.embedding) END,
          model = COALESCE(EXCLUDED.model, content_chunks.model),
          token_count = EXCLUDED.token_count,
-         embedded_at = COALESCE(EXCLUDED.embedded_at, content_chunks.embedded_at)`,
+         embedded_at = CASE
+           WHEN EXCLUDED.chunk_text != content_chunks.chunk_text THEN EXCLUDED.embedded_at
+           WHEN EXCLUDED.embedding IS NOT NULL THEN EXCLUDED.embedded_at
+           WHEN content_chunks.embedding IS NOT NULL THEN content_chunks.embedded_at
+           ELSE NULL
+         END`,
       params
     );
   }
@@ -548,7 +553,7 @@ export class PGLiteEngine implements BrainEngine {
       SELECT
         (SELECT count(*) FROM pages) as page_count,
         (SELECT count(*) FROM content_chunks) as chunk_count,
-        (SELECT count(*) FROM content_chunks WHERE embedded_at IS NOT NULL) as embedded_count,
+        (SELECT count(*) FROM content_chunks WHERE embedding IS NOT NULL) as embedded_count,
         (SELECT count(*) FROM links) as link_count,
         (SELECT count(DISTINCT tag) FROM tags) as tag_count,
         (SELECT count(*) FROM timeline_entries) as timeline_entry_count
@@ -578,7 +583,7 @@ export class PGLiteEngine implements BrainEngine {
     const { rows: [h] } = await this.db.query(`
       SELECT
         (SELECT count(*) FROM pages) as page_count,
-        (SELECT count(*) FROM content_chunks WHERE embedded_at IS NOT NULL)::float /
+        (SELECT count(*) FROM content_chunks WHERE embedding IS NOT NULL)::float /
           GREATEST((SELECT count(*) FROM content_chunks), 1)::float as embed_coverage,
         (SELECT count(*) FROM pages p
          WHERE p.updated_at < (SELECT MAX(te.created_at) FROM timeline_entries te WHERE te.page_id = p.id)
@@ -590,7 +595,7 @@ export class PGLiteEngine implements BrainEngine {
         (SELECT count(*) FROM links l
          WHERE NOT EXISTS (SELECT 1 FROM pages p WHERE p.id = l.to_page_id)
         ) as dead_links,
-        (SELECT count(*) FROM content_chunks WHERE embedded_at IS NULL) as missing_embeddings,
+        (SELECT count(*) FROM content_chunks WHERE embedding IS NULL) as missing_embeddings,
         (SELECT count(*) FROM links) as link_count,
         (SELECT count(DISTINCT page_id) FROM timeline_entries) as pages_with_timeline
     `);

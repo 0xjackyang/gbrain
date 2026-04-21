@@ -79,6 +79,25 @@ describe('postgres-engine / search path timeout isolation', () => {
   });
 });
 
+describe('postgres-engine / embedding integrity', () => {
+  test('upsertChunks no longer preserves embedded_at when the stored vector is null', () => {
+    const fn = stripComments(extractMethod(SRC, 'upsertChunks'));
+    expect(fn).not.toMatch(/embedded_at\s*=\s*COALESCE\s*\(\s*EXCLUDED\.embedded_at\s*,\s*content_chunks\.embedded_at\s*\)/);
+    expect(fn).toMatch(/embedded_at\s*=\s*CASE[\s\S]*WHEN\s+EXCLUDED\.chunk_text\s*!=\s*content_chunks\.chunk_text\s+THEN\s+EXCLUDED\.embedded_at[\s\S]*WHEN\s+EXCLUDED\.embedding\s+IS\s+NOT\s+NULL\s+THEN\s+EXCLUDED\.embedded_at[\s\S]*WHEN\s+content_chunks\.embedding\s+IS\s+NOT\s+NULL\s+THEN\s+content_chunks\.embedded_at[\s\S]*ELSE\s+NULL[\s\S]*END/);
+  });
+
+  test('getStats counts actual vectors, not embedded_at', () => {
+    const fn = stripComments(extractMethod(SRC, 'getStats'));
+    expect(fn).toMatch(/content_chunks\s+WHERE\s+embedding\s+IS\s+NOT\s+NULL\)\s+as\s+embedded_count/i);
+  });
+
+  test('getHealth counts coverage and missing embeddings from actual vectors', () => {
+    const fn = stripComments(extractMethod(SRC, 'getHealth'));
+    expect(fn).toMatch(/content_chunks\s+WHERE\s+embedding\s+IS\s+NOT\s+NULL\)::float\s*\/\s*GREATEST\(\(SELECT\s+count\(\*\)\s+FROM\s+content_chunks\),\s*1\)::float\s+as\s+embed_coverage/i);
+    expect(fn).toMatch(/content_chunks\s+WHERE\s+embedding\s+IS\s+NULL\)\s+as\s+missing_embeddings/i);
+  });
+});
+
 function stripComments(s: string): string {
   return s
     .replace(/\/\*[\s\S]*?\*\//g, '')

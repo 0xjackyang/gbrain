@@ -36,7 +36,7 @@ async function embedPage(engine: BrainEngine, slug: string) {
   }
 
   // Get existing chunks or create new ones
-  let chunks = await engine.getChunks(slug);
+  let chunks = await engine.getChunksWithEmbeddings(slug);
   if (chunks.length === 0) {
     // Create chunks first
     const inputs: ChunkInput[] = [];
@@ -52,12 +52,12 @@ async function embedPage(engine: BrainEngine, slug: string) {
     }
     if (inputs.length > 0) {
       await engine.upsertChunks(slug, inputs);
-      chunks = await engine.getChunks(slug);
+      chunks = await engine.getChunksWithEmbeddings(slug);
     }
   }
 
-  // Embed chunks without embeddings
-  const toEmbed = chunks.filter(c => !c.embedded_at);
+  // Embed chunks whose stored vector is actually missing.
+  const toEmbed = chunks.filter(c => !c.embedding);
   if (toEmbed.length === 0) {
     console.log(`${slug}: all ${chunks.length} chunks already embedded`);
     return;
@@ -97,9 +97,11 @@ async function embedAll(engine: BrainEngine, staleOnly: boolean) {
   const CONCURRENCY = parseInt(process.env.GBRAIN_EMBED_CONCURRENCY || '20', 10);
 
   async function embedOnePage(page: typeof pages[number]) {
-    const chunks = await engine.getChunks(page.slug);
+    const chunks = staleOnly
+      ? await engine.getChunksWithEmbeddings(page.slug)
+      : await engine.getChunks(page.slug);
     const toEmbed = staleOnly
-      ? chunks.filter(c => !c.embedded_at)
+      ? chunks.filter(c => !c.embedding)
       : chunks;
 
     if (toEmbed.length === 0) {
