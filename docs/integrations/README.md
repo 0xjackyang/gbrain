@@ -26,12 +26,18 @@ Next query is smarter (the compounding effect)
 These are integration recipes your agent can set up for you. Run
 `gbrain integrations` to see what's available and their status.
 
+Recommended sequence for email:
+1. `credential-gateway`
+2. `email-to-brain` (sense)
+3. `ai-email-assistance` (reflex)
+
 | Recipe | Category | Requires | What It Does | Setup Time |
 |--------|----------|----------|-------------|------------|
 | [ngrok-tunnel](../../recipes/ngrok-tunnel.md) | Infra | — | Fixed public URL for MCP + voice ($8/mo) | 10 min |
 | [credential-gateway](../../recipes/credential-gateway.md) | Infra | — | Gmail + Calendar access (ClawVisor or Google OAuth) | 15 min |
 | [voice-to-brain](../../recipes/twilio-voice-brain.md) | Sense | ngrok-tunnel | Phone calls create brain pages via Twilio + OpenAI Realtime | 30 min |
-| [email-to-brain](../../recipes/email-to-brain.md) | Sense | credential-gateway | Gmail messages flow into entity pages via deterministic collector | 20 min |
+| [email-to-brain](../../recipes/email-to-brain.md) | Sense | credential-gateway | Gmail collection and brain enrichment via deterministic collector | 20 min |
+| [ai-email-assistance](../../recipes/ai-email-assistance.md) | Reflex | email-to-brain | Board-style inbox briefing and optional low-risk mailbox actions after the sense runs | 15 min |
 | [x-to-brain](../../recipes/x-to-brain.md) | Sense | — | Twitter timeline, mentions, keyword monitoring with deletion detection | 15 min |
 | [calendar-to-brain](../../recipes/calendar-to-brain.md) | Sense | credential-gateway | Google Calendar events become searchable daily brain pages | 20 min |
 | [meeting-sync](../../recipes/meeting-sync.md) | Sense | — | Circleback meeting transcripts auto-import with attendee propagation | 15 min |
@@ -98,6 +104,9 @@ stop fighting the LLM. Move the mechanical work to code.
 
 - Email collection: code pulls emails with baked-in links (100% reliable).
   LLM reads the digest, classifies, enriches brain entries (judgment).
+- AI email assistance: a reflex reads the current inbox plus fresh brain context,
+  produces a briefing, and can optionally perform bounded low-risk actions.
+  It should run **after** Email-to-Brain, not replace it.
 - Tweet collection: code pulls timeline, detects deletions, tracks engagement
   (deterministic). LLM extracts entities, writes brain updates (judgment).
 - Calendar sync: code pulls events and attendees (deterministic). LLM enriches

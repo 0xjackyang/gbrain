@@ -284,17 +284,32 @@ gbrain check-resolvable
 
 ## Getting Data In
 
-GBrain ships integration recipes that your agent sets up for you. Each recipe tells the agent what credentials to ask for, how to validate, and what cron to register.
+GBrain ships integration recipes that your agent sets up for you. **Senses** get
+new data into the brain. **Reflexes** act on patterns using data the senses have
+already made reliable.
+
+### Built-in Senses
 
 | Recipe | Requires | What It Does |
 |--------|----------|-------------|
 | [Public Tunnel](recipes/ngrok-tunnel.md) | — | Fixed URL for MCP + voice (ngrok Hobby $8/mo) |
 | [Credential Gateway](recipes/credential-gateway.md) | — | Gmail + Calendar access |
 | [Voice-to-Brain](recipes/twilio-voice-brain.md) | ngrok-tunnel | Phone calls to brain pages (Twilio + OpenAI Realtime) |
-| [Email-to-Brain](recipes/email-to-brain.md) | credential-gateway | Gmail to entity pages |
+| [Email-to-Brain](recipes/email-to-brain.md) | credential-gateway | Gmail collection plus brain enrichment via deterministic collector |
 | [X-to-Brain](recipes/x-to-brain.md) | — | Twitter timeline + mentions + deletions |
 | [Calendar-to-Brain](recipes/calendar-to-brain.md) | credential-gateway | Google Calendar to searchable daily pages |
 | [Meeting Sync](recipes/meeting-sync.md) | — | Circleback transcripts to brain pages with attendees |
+
+### Built-in Reflexes
+
+| Recipe | Requires | What It Does |
+|--------|----------|-------------|
+| [AI Email Assistance](recipes/ai-email-assistance.md) | email-to-brain | Board-style inbox briefing and optional low-risk mailbox actions after Email-to-Brain runs |
+
+Recommended email sequence:
+1. `credential-gateway`
+2. `email-to-brain` (sense)
+3. `ai-email-assistance` (reflex)
 
 **Data research recipes** extract structured data from email into tracked brain pages. Built-in recipes for investor updates (MRR, ARR, runway, headcount), expense tracking, and company metrics. Create your own with `gbrain research init`.
 
