@@ -34,13 +34,21 @@ cost_estimate: "$0 (both options are free)"
 
 # Email-to-Brain: Gmail Messages That Update Your Brain
 
-Emails arrive. Brain pages get smarter. The agent reads your inbox, detects
-entities, updates person and company pages, extracts action items, and files
-everything with source attribution.
+Emails arrive. Deterministic code captures them. The agent reads the collected
+digest, detects entities, updates person and company pages, extracts action
+items, and files everything with source attribution.
 
 ## IMPORTANT: Instructions for the Agent
 
 **You are the installer.** Follow these steps precisely.
+
+**This recipe is a SENSE, not an inbox assistant.** Its job is to collect Gmail
+messages deterministically, preserve reliable links and timestamps, and feed
+brain enrichment. It does **not** decide which threads to archive, which ones to
+keep in inbox, or how to brief the user. Those are downstream **reflex** jobs.
+If the user wants board-style inbox briefings, archive suggestions, or optional
+mailbox mutation, install a separate reflex such as **AI Email Assistance** on
+_top of_ Email-to-Brain.
 
 **The core pattern: code for data, LLMs for judgment.**
 Email collection is split into two layers:
@@ -122,8 +130,8 @@ Tell the user:
 1. Go to https://clawvisor.com
 2. Create an agent (or use existing)
 3. Activate the Gmail service
-4. Create a standing task with purpose: 'Full executive assistant email management
-   including inbox triage, searching by any criteria, reading emails, tracking threads'
+4. Create a standing task with purpose: 'Broad Gmail collection, thread retrieval,
+   search by any criteria, and historical access for brain ingestion and research'
    IMPORTANT: Be EXPANSIVE in the task purpose. Narrow purposes like 'email triage'
    will cause legitimate requests to fail verification.
 5. Copy the gateway URL and agent token"
@@ -228,7 +236,8 @@ The collector should run every 30 minutes:
 ```
 
 The agent should read the digest on a schedule (e.g., 3x/day: 9 AM, 12 PM, 3 PM)
-and run the enrichment flow from Step 4.
+and run the enrichment flow from Step 4. If the user also wants inbox briefings
+or mailbox actioning, wire those as a separate reflex after this sense succeeds.
 
 ### Step 6: Log Setup Completion
 
