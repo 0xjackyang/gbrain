@@ -149,7 +149,9 @@ async function embedPage(
   // Get existing chunks or create new ones.
   // In dryRun, we still chunk the text locally to count what WOULD be
   // embedded — but we never write chunks or call the embedding model.
-  let chunks = await engine.getChunks(slug);
+  // Fork fa3713b: use getChunksWithEmbeddings so the .embedding field is
+  // populated — the hidden-null integrity check below depends on it.
+  let chunks = await engine.getChunksWithEmbeddings(slug);
   if (chunks.length === 0) {
     const inputs: ChunkInput[] = [];
     if (page.compiled_truth.trim()) {
@@ -173,12 +175,13 @@ async function embedPage(
 
     if (inputs.length > 0) {
       await engine.upsertChunks(slug, inputs);
-      chunks = await engine.getChunks(slug);
+      chunks = await engine.getChunksWithEmbeddings(slug);
     }
   }
 
-  // Embed chunks without embeddings
-  const toEmbed = chunks.filter(c => !c.embedded_at);
+  // Embed chunks whose stored vector is actually missing (fork fa3713b fix:
+  // checking embedded_at alone can mask hidden-null embeddings from failed runs).
+  const toEmbed = chunks.filter(c => !c.embedding);
   result.total_chunks += chunks.length;
   result.skipped += chunks.length - toEmbed.length;
 
@@ -234,9 +237,11 @@ async function embedAll(
   const CONCURRENCY = parseInt(process.env.GBRAIN_EMBED_CONCURRENCY || '20', 10);
 
   async function embedOnePage(page: typeof pages[number]) {
-    const chunks = await engine.getChunks(page.slug);
+    const chunks = staleOnly
+      ? await engine.getChunksWithEmbeddings(page.slug)
+      : await engine.getChunks(page.slug);
     const toEmbed = staleOnly
-      ? chunks.filter(c => !c.embedded_at)
+      ? chunks.filter(c => !c.embedding)
       : chunks;
 
     result.total_chunks += chunks.length;

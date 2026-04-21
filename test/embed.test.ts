@@ -108,13 +108,13 @@ describe('runEmbed --all (parallel)', () => {
   test('skips pages whose chunks are all already embedded when --stale', async () => {
     const pages = [{ slug: 'fresh' }, { slug: 'stale' }];
     const chunksBySlug = new Map<string, any[]>([
-      ['fresh', [{ chunk_index: 0, chunk_text: 'hi', chunk_source: 'compiled_truth', embedded_at: '2026-01-01', token_count: 1 }]],
-      ['stale', [{ chunk_index: 0, chunk_text: 'hi', chunk_source: 'compiled_truth', embedded_at: null, token_count: 1 }]],
+      ['fresh', [{ chunk_index: 0, chunk_text: 'hi', chunk_source: 'compiled_truth', embedding: new Float32Array(1536), embedded_at: '2026-01-01', token_count: 1 }]],
+      ['stale', [{ chunk_index: 0, chunk_text: 'hi', chunk_source: 'compiled_truth', embedding: null, embedded_at: null, token_count: 1 }]],
     ]);
 
     const engine = mockEngine({
       listPages: async () => pages,
-      getChunks: async (slug: string) => chunksBySlug.get(slug) || [],
+      getChunksWithEmbeddings: async (slug: string) => chunksBySlug.get(slug) || [],
       upsertChunks: async () => {},
     });
 
@@ -124,6 +124,27 @@ describe('runEmbed --all (parallel)', () => {
 
     // Only the stale page triggers an embedBatch call.
     expect(totalEmbedCalls).toBe(1);
+  });
+
+  test('repairs hidden-null chunks when --stale', async () => {
+    const pages = [{ slug: 'healthy' }, { slug: 'hidden-null' }];
+    const chunksBySlug = new Map<string, any[]>([
+      ['healthy', [{ chunk_index: 0, chunk_text: 'ok', chunk_source: 'compiled_truth', embedding: new Float32Array(1536), embedded_at: '2026-01-01', token_count: 1 }]],
+      ['hidden-null', [{ chunk_index: 0, chunk_text: 'repair me', chunk_source: 'compiled_truth', embedding: null, embedded_at: '2026-01-01', token_count: 2 }]],
+    ]);
+
+    const engine = mockEngine({
+      listPages: async () => pages,
+      getChunksWithEmbeddings: async (slug: string) => chunksBySlug.get(slug) || [],
+    });
+
+    await runEmbed(engine, ['--stale']);
+
+    expect(totalEmbedCalls).toBe(1);
+    const upserts = (engine as any)._calls.filter((c: any) => c.method === 'upsertChunks');
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].args[0]).toBe('hidden-null');
+    expect(upserts[0].args[1][0].embedding).toBeInstanceOf(Float32Array);
   });
 });
 
