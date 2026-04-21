@@ -254,6 +254,35 @@ describe('twilio-voice-brain recipe', () => {
   });
 });
 
+describe('ai-email-assistance recipe', () => {
+  test('recipe file parses correctly', () => {
+    const { readFileSync } = require('fs');
+    const content = readFileSync(
+      new URL('../recipes/ai-email-assistance.md', import.meta.url),
+      'utf-8'
+    );
+    const recipe = parseRecipe(content, 'ai-email-assistance.md');
+    expect(recipe).not.toBeNull();
+    expect(recipe!.frontmatter.id).toBe('ai-email-assistance');
+    expect(recipe!.frontmatter.category).toBe('reflex');
+    expect(recipe!.frontmatter.requires).toEqual(['email-to-brain']);
+    expect(recipe!.frontmatter.secrets.map((s: any) => s.name)).toContain('AI_EMAIL_ASSISTANCE_MODE');
+    expect(recipe!.frontmatter.health_checks.length).toBeGreaterThan(0);
+    expect(recipe!.body.length).toBeGreaterThan(100);
+  });
+
+  test('recipe clearly describes the sense/reflex split', () => {
+    const { readFileSync } = require('fs');
+    const content = readFileSync(
+      new URL('../recipes/ai-email-assistance.md', import.meta.url),
+      'utf-8'
+    );
+    expect(content).toContain('Email-to-Brain');
+    expect(content).toContain('sense');
+    expect(content).toContain('reflex');
+  });
+});
+
 // --- All recipes parse without error ---
 
 describe('all recipes', () => {
