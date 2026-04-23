@@ -355,7 +355,7 @@ export class PostgresEngine implements BrainEngine {
            WHEN content_chunks.embedding IS NOT NULL THEN content_chunks.embedded_at
            ELSE NULL
          END`,
-      params,
+      params as Parameters<typeof sql.unsafe>[1],
     );
   }
 

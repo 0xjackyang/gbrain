@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 /**
  * Walk up from `startDir` looking for `skills/RESOLVER.md` — the marker of a
@@ -21,8 +22,6 @@ export function findRepoRoot(startDir: string = process.cwd()): string | null {
   // ~/gbrain), cwd may not be inside the repo. Fall back to the binary's
   // own installation tree.
   try {
-    const { fileURLToPath } = require('url');
-    const { dirname } = require('path');
     const bundledRoot = dirname(dirname(fileURLToPath(import.meta.url)));
     if (existsSync(join(bundledRoot, 'skills', 'RESOLVER.md'))) return bundledRoot;
   } catch {}

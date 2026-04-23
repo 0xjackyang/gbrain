@@ -13,7 +13,7 @@ const syncResult = {
   pagesAffected: [],
 };
 
-let performSyncImpl = async () => syncResult;
+let performSyncImpl: (...args: unknown[]) => Promise<typeof syncResult> = async () => syncResult;
 
 mock.module('../src/commands/sync.ts', () => ({
   performSync: (...args: any[]) => performSyncImpl(...args),
